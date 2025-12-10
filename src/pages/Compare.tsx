@@ -63,16 +63,20 @@ export default function Compare() {
   const dateRange = getDateRange()
   const periodLabel = getPeriodLabel()
 
-  // Fetch all data
+  // Fetch static data once on mount (tickets and projects don't depend on date range)
+  useEffect(() => {
+    fetchServiceBoardTickets()
+    fetchProjects()
+    fetchProjectTickets()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch time entries when date range changes
   useEffect(() => {
     fetchTimeEntries({
       startDate: format(dateRange.start, 'yyyy-MM-dd'),
       endDate: format(dateRange.end, 'yyyy-MM-dd'),
     })
-    fetchServiceBoardTickets()
-    fetchProjects()
-    fetchProjectTickets()
-  }, [dateRange.start.getTime(), dateRange.end.getTime()])
+  }, [dateRange.start.getTime(), dateRange.end.getTime(), fetchTimeEntries])
 
   // Filter entries by date range
   const filteredEntries = useMemo(() => {

@@ -37,12 +37,17 @@ export default function Trends() {
     }
   }, [timePeriod])
 
+  // Fetch static data once on mount (tickets and projects don't depend on date range)
   useEffect(() => {
-    fetchTimeEntries({ startDate: format(dateRange.start, 'yyyy-MM-dd'), endDate: format(dateRange.end, 'yyyy-MM-dd') })
     fetchServiceBoardTickets()
     fetchProjects()
     fetchProjectTickets()
-  }, [dateRange.start.getTime(), dateRange.end.getTime()])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch time entries when date range changes
+  useEffect(() => {
+    fetchTimeEntries({ startDate: format(dateRange.start, 'yyyy-MM-dd'), endDate: format(dateRange.end, 'yyyy-MM-dd') })
+  }, [dateRange.start.getTime(), dateRange.end.getTime(), fetchTimeEntries])
 
   const selectedEngineer = selectedEngineerId ? members.find(m => m.id === selectedEngineerId) : null
 

@@ -56,7 +56,7 @@ export default function Projects() {
     fetchProjects, fetchProjectTickets, 
     getProjectStats, getProjectTicketStats 
   } = useProjectsStore()
-  const { getPeriodLabel } = useTimePeriodStore()
+  const { getPeriodLabel, getDateRange } = useTimePeriodStore()
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'projects' | 'tickets'>('projects')
@@ -66,6 +66,7 @@ export default function Projects() {
   const [analysisError, setAnalysisError] = useState<string | null>(null)
 
   const periodLabel = getPeriodLabel()
+  const dateRange = getDateRange()
 
   const selectedEngineer = selectedEngineerId 
     ? members.find(m => m.id === selectedEngineerId)
@@ -114,9 +115,16 @@ export default function Projects() {
     return result
   }, [projects, selectedEngineer, statusFilter, searchQuery])
 
-  // Filter project tickets based on engineer and filters
+  // Filter project tickets based on engineer, date range, and filters
   const filteredTickets = useMemo(() => {
     let result = projectTickets
+
+    // Filter by date range (dateEntered)
+    result = result.filter(t => {
+      if (!t.dateEntered) return true
+      const entered = new Date(t.dateEntered)
+      return entered >= dateRange.start && entered <= dateRange.end
+    })
 
     // Filter by selected project
     if (selectedProjectId) {
@@ -145,7 +153,7 @@ export default function Projects() {
     }
 
     return result
-  }, [projectTickets, selectedEngineer, selectedProjectId, statusFilter, searchQuery])
+  }, [projectTickets, selectedEngineer, selectedProjectId, statusFilter, searchQuery, dateRange])
 
   // Group tickets by phase
   const ticketsByPhase = useMemo(() => {

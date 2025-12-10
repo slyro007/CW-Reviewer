@@ -34,12 +34,17 @@ export default function Highlights() {
   const periodLabel = getPeriodLabel()
   const selectedEngineer = selectedEngineerId ? members.find(m => m.id === selectedEngineerId) : null
 
+  // Fetch static data once on mount (tickets and projects don't depend on date range)
   useEffect(() => {
-    fetchTimeEntries({ startDate: format(dateRange.start, 'yyyy-MM-dd'), endDate: format(dateRange.end, 'yyyy-MM-dd') })
     fetchServiceBoardTickets()
     fetchProjects()
     fetchProjectTickets()
-  }, [dateRange.start.getTime(), dateRange.end.getTime()])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch time entries when date range changes
+  useEffect(() => {
+    fetchTimeEntries({ startDate: format(dateRange.start, 'yyyy-MM-dd'), endDate: format(dateRange.end, 'yyyy-MM-dd') })
+  }, [dateRange.start.getTime(), dateRange.end.getTime(), fetchTimeEntries])
 
   // Filter entries
   const filteredEntries = useMemo(() => {
@@ -80,8 +85,16 @@ export default function Highlights() {
   const filteredProjectTickets = useMemo(() => {
     if (!includesProjects) return []
     const projectIds = filteredProjects.map(p => p.id)
-    return projectTickets.filter(t => projectIds.includes(t.projectId))
-  }, [projectTickets, filteredProjects, includesProjects])
+    return projectTickets.filter(t => {
+      // Filter by date range
+      if (t.dateEntered) {
+        const entered = new Date(t.dateEntered)
+        if (entered < dateRange.start || entered > dateRange.end) return false
+      }
+      // Filter by project
+      return projectIds.includes(t.projectId)
+    })
+  }, [projectTickets, filteredProjects, includesProjects, dateRange])
 
   // Calculate achievements
   const achievements = useMemo((): Achievement[] => {

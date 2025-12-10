@@ -43,12 +43,17 @@ export default function TimeTracking() {
   const periodLabel = getPeriodLabel()
   const selectedEngineer = selectedEngineerId ? members.find(m => m.id === selectedEngineerId) : null
 
+  // Fetch static data once on mount (tickets and projects don't depend on date range)
   useEffect(() => {
-    fetchTimeEntries({ startDate: format(dateRange.start, 'yyyy-MM-dd'), endDate: format(dateRange.end, 'yyyy-MM-dd') })
     fetchServiceBoardTickets()
     fetchProjects()
     fetchProjectTickets()
-  }, [dateRange.start.getTime(), dateRange.end.getTime()])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch time entries when date range changes
+  useEffect(() => {
+    fetchTimeEntries({ startDate: format(dateRange.start, 'yyyy-MM-dd'), endDate: format(dateRange.end, 'yyyy-MM-dd') })
+  }, [dateRange.start.getTime(), dateRange.end.getTime(), fetchTimeEntries])
 
   // Filter entries
   const filteredEntries = useMemo(() => {
@@ -72,17 +77,29 @@ export default function TimeTracking() {
       const uniqueDays = new Set(memberEntries.map(e => new Date(e.dateStart).toDateString())).size
       const identifier = member.identifier.toLowerCase()
 
-      // Service desk stats
-      const memberServiceTickets = includesServiceDesk ? serviceTickets.filter(t => 
-        t.owner?.toLowerCase() === identifier || t.resources?.toLowerCase().includes(identifier)
-      ) : []
+      // Service desk stats - filter by date range and engineer
+      const memberServiceTickets = includesServiceDesk ? serviceTickets.filter(t => {
+        // Filter by date range
+        if (t.dateEntered) {
+          const entered = new Date(t.dateEntered)
+          if (entered < dateRange.start || entered > dateRange.end) return false
+        }
+        // Filter by engineer
+        return t.owner?.toLowerCase() === identifier || t.resources?.toLowerCase().includes(identifier)
+      }) : []
       
-      // Project stats
+      // Project stats - filter by date range and engineer
       const memberProjects = includesProjects ? projects.filter(p => p.managerIdentifier?.toLowerCase() === identifier) : []
       const memberProjectIds = memberProjects.map(p => p.id)
-      const memberProjectTickets = includesProjects ? projectTickets.filter(t => 
-        memberProjectIds.includes(t.projectId) || t.resources?.toLowerCase().includes(identifier)
-      ) : []
+      const memberProjectTickets = includesProjects ? projectTickets.filter(t => {
+        // Filter by date range
+        if (t.dateEntered) {
+          const entered = new Date(t.dateEntered)
+          if (entered < dateRange.start || entered > dateRange.end) return false
+        }
+        // Filter by engineer
+        return memberProjectIds.includes(t.projectId) || t.resources?.toLowerCase().includes(identifier)
+      }) : []
 
       return {
         memberId: member.id,
@@ -101,7 +118,7 @@ export default function TimeTracking() {
         projectTicketsClosed: memberProjectTickets.filter(t => t.closedFlag).length,
       }
     }).sort((a, b) => b.totalHours - a.totalHours)
-  }, [members, filteredEntries, serviceTickets, projects, projectTickets, selectedEngineerId, includesServiceDesk, includesProjects])
+  }, [members, filteredEntries, serviceTickets, projects, projectTickets, selectedEngineerId, includesServiceDesk, includesProjects, dateRange])
 
   // Aggregate stats
   const aggregateStats = useMemo(() => {
@@ -214,7 +231,7 @@ export default function TimeTracking() {
                             <span className="text-white font-medium">{engineer.totalHours.toFixed(1)}h</span>
                           </div>
                           <div className="h-2 bg-gray-600 rounded-full overflow-hidden">
-                            <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min((engineer.totalHours / Math.max(...engineerAnalytics.map(e => e.totalHours))) * 100, 100)}%` }} />
+                            <div className="h-full bg-blue-500 rounded-full" style={{ width: `${engineerAnalytics.length > 0 ? Math.min((engineer.totalHours / Math.max(...engineerAnalytics.map(e => e.totalHours), 1)) * 100, 100) : 0}%` }} />
                           </div>
                         </div>
                         
