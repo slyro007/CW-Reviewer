@@ -16,7 +16,7 @@ import {
   AreaChart,
   Area,
 } from 'recharts'
-import { format, startOfWeek, startOfMonth, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval, subDays, subMonths } from 'date-fns'
+import { format, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval, subDays, subMonths } from 'date-fns'
 
 type TimeRange = '7d' | '30d' | '90d' | '6m' | '1y'
 type Granularity = 'day' | 'week' | 'month'
@@ -144,7 +144,6 @@ export default function Trends() {
     
     // Calculate trend (compare to previous period)
     const previousStart = new Date(dateRange.start)
-    const previousEnd = new Date(dateRange.start)
     previousStart.setTime(previousStart.getTime() - (dateRange.end.getTime() - dateRange.start.getTime()))
     
     const previousEntries = entries.filter(e => {

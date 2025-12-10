@@ -344,13 +344,13 @@ export default function Compare() {
                       domain={[0, 100]} 
                       tick={{ fill: '#9ca3af', fontSize: 10 }}
                     />
-                    {engineerStats.map((stats, index) => (
+                    {engineerStats.map((stats, idx) => (
                       <Radar
                         key={stats.id}
                         name={stats.name}
                         dataKey={stats.name}
-                        stroke={COLORS[index % COLORS.length]}
-                        fill={COLORS[index % COLORS.length]}
+                        stroke={COLORS[idx % COLORS.length]}
+                        fill={COLORS[idx % COLORS.length]}
                         fillOpacity={0.2}
                       />
                     ))}
