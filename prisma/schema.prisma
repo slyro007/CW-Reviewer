@@ -1,0 +1,128 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  stackUserId   String   @unique
+  email         String
+  name          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([stackUserId])
+}
+
+model Board {
+  id          Int      @id
+  name        String
+  type        String   // "MS" or "PS"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tickets     Ticket[]
+
+  @@index([type])
+}
+
+model Member {
+  id              Int      @id
+  identifier      String   @unique
+  firstName       String?
+  lastName        String?
+  email           String?
+  inactiveFlag    Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  timeEntries     TimeEntry[]
+  reviews         Review[]
+
+  @@index([identifier])
+  @@index([inactiveFlag])
+}
+
+model Ticket {
+  id              Int      @id
+  summary         String?
+  boardId         Int
+  status          String?
+  closedDate      DateTime?
+  closedFlag      Boolean  @default(false)
+  dateEntered     DateTime?
+  resolvedDate    DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  board           Board        @relation(fields: [boardId], references: [id])
+  timeEntries     TimeEntry[]
+
+  @@index([boardId])
+  @@index([closedFlag])
+  @@index([dateEntered])
+  @@index([resolvedDate])
+}
+
+model TimeEntry {
+  id              Int      @id
+  memberId        Int
+  ticketId         Int?
+  hours           Float
+  billableOption  String?  // "Billable", "DoNotBill", "NoCharge", etc.
+  notes           String?
+  dateStart       DateTime
+  dateEnd         DateTime?
+  internalNotes   String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  member          Member      @relation(fields: [memberId], references: [id])
+  ticket          Ticket?     @relation(fields: [ticketId], references: [id])
+
+  @@index([memberId])
+  @@index([ticketId])
+  @@index([dateStart])
+  @@index([billableOption])
+}
+
+model AnalysisCache {
+  id              String   @id @default(cuid())
+  cacheKey        String   @unique
+  cacheType       String   // "trend", "comparison", "review"
+  data            Json
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([cacheKey])
+  @@index([cacheType])
+  @@index([expiresAt])
+}
+
+model Review {
+  id              String   @id @default(cuid())
+  memberId        Int
+  reviewType      String   // "msp_standards", "quarterly", "annual"
+  periodStart     DateTime
+  periodEnd       DateTime
+  summary         String
+  details         Json
+  score           Float?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  member          Member   @relation(fields: [memberId], references: [id])
+
+  @@index([memberId])
+  @@index([reviewType])
+  @@index([periodStart, periodEnd])
+}
+
