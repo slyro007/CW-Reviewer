@@ -208,11 +208,59 @@ class ConnectWiseClient {
   }
 
   /**
+   * Fetch all pages of results by automatically paginating through all available pages
+   * This is useful when you need ALL records, not just the first 1000
+   */
+  private async requestAllPages<T>(
+    endpoint: string,
+    options: RequestOptions = {}
+  ): Promise<T[]> {
+    let allResults: T[] = []
+    let page = 1
+    const pageSize = 1000
+    let hasMore = true
+
+    console.log(`[ConnectWise] Fetching all pages for ${endpoint}...`)
+
+    while (hasMore) {
+      try {
+        const results = await this.request<T[]>(endpoint, {
+          ...options,
+          page,
+          pageSize,
+        })
+
+        if (Array.isArray(results)) {
+          allResults.push(...results)
+          hasMore = results.length === pageSize
+          console.log(`[ConnectWise] Page ${page}: ${results.length} records (total: ${allResults.length})`)
+          page++
+        } else {
+          // If result is not an array, it might be a single object or different format
+          console.warn(`[ConnectWise] Unexpected response format for ${endpoint} on page ${page}`)
+          hasMore = false
+        }
+      } catch (error: any) {
+        console.error(`[ConnectWise] Error fetching page ${page} of ${endpoint}:`, error.message)
+        // If we got at least one page successfully, return what we have
+        if (allResults.length > 0) {
+          console.warn(`[ConnectWise] Returning ${allResults.length} records despite error on page ${page}`)
+          return allResults
+        }
+        throw error
+      }
+    }
+
+    console.log(`[ConnectWise] ✅ Fetched all pages for ${endpoint}: ${allResults.length} total records`)
+    return allResults
+  }
+
+  /**
    * Fetch members (engineers) - basic info and identifiers only
    */
   async getMembers(options: RequestOptions = {}): Promise<any[]> {
     const conditions = 'inactiveFlag=false'
-    return this.request<any[]>('/system/members', {
+    return this.requestAllPages<any[]>('/system/members', {
       ...options,
       conditions: options.conditions 
         ? `${conditions} AND ${options.conditions}`
@@ -251,7 +299,7 @@ class ConnectWiseClient {
         : memberCondition
     }
 
-    return this.request<any[]>('/time/entries', {
+    return this.requestAllPages<any[]>('/time/entries', {
       ...options,
       conditions: conditions || undefined,
       orderBy: 'timeStart desc',
@@ -288,7 +336,7 @@ class ConnectWiseClient {
         : dateCondition
     }
 
-    return this.request<any[]>('/service/tickets', {
+    return this.requestAllPages<any[]>('/service/tickets', {
       ...options,
       conditions: conditions || undefined,
       orderBy: 'dateEntered desc',
@@ -302,7 +350,7 @@ class ConnectWiseClient {
    */
   async getBoards(type?: 'MS' | 'PS', options: RequestOptions = {}): Promise<any[]> {
     const conditions = type ? `name LIKE '%${type}%'` : undefined
-    return this.request<any[]>('/service/boards', {
+    return this.requestAllPages<any[]>('/service/boards', {
       ...options,
       conditions: options.conditions 
         ? (conditions ? `${conditions} AND ${options.conditions}` : options.conditions)
@@ -327,7 +375,7 @@ class ConnectWiseClient {
       conditions = `(${managerConditions})`
     }
 
-    return this.request<any[]>('/project/projects', {
+    return this.requestAllPages<any[]>('/project/projects', {
       ...options,
       conditions: conditions || undefined,
       orderBy: options.orderBy || 'id desc',
@@ -360,7 +408,7 @@ class ConnectWiseClient {
       conditions = `project/id=${projectId}`
     }
 
-    return this.request<any[]>('/project/tickets', {
+    return this.requestAllPages<any[]>('/project/tickets', {
       ...options,
       conditions: conditions || undefined,
       orderBy: options.orderBy || 'id desc',

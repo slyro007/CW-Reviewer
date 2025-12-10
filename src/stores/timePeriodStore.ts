@@ -21,7 +21,7 @@ export const useTimePeriodStore = create<TimePeriodState>((set, get) => ({
     
     switch (get().timePeriod) {
       case 'all':
-        start = subYears(end, 3) // 3 years of data
+        start = subYears(end, 5) // 5 years of data
         break
       case 'yearly':
         start = startOfYear(end)
@@ -36,7 +36,7 @@ export const useTimePeriodStore = create<TimePeriodState>((set, get) => ({
         start = startOfWeek(end)
         break
       default:
-        start = subYears(end, 3)
+        start = subYears(end, 5)
     }
     
     return { start, end }
