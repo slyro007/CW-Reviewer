@@ -83,9 +83,11 @@ export default function Notes() {
 
       const qualityResult = calculateNoteQuality(entry.notes, ticketSummary)
 
+      const date = entry.dateStart instanceof Date ? entry.dateStart.toISOString() : entry.dateStart
+
       mapped.push({
         id: entry.id,
-        date: entry.dateStart,
+        date,
         hours: entry.hours,
         notes: entry.notes || '',
         billableOption: entry.billableOption || 'N/A',
