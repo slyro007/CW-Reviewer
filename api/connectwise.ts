@@ -26,6 +26,15 @@ class ConnectWiseClient {
   private codebase: string | null = null
 
   constructor(config: ConnectWiseConfig) {
+    // Validate config
+    if (!config) {
+      throw new Error('ConnectWiseConfig is required')
+    }
+    
+    if (!config.clientId || !config.publicKey || !config.privateKey || !config.baseUrl || !config.companyId) {
+      throw new Error('All ConnectWise config fields are required: clientId, publicKey, privateKey, baseUrl, companyId')
+    }
+    
     this.config = config
   }
 
@@ -71,15 +80,31 @@ class ConnectWiseClient {
     endpoint: string,
     options: RequestOptions = {}
   ): Promise<T> {
+    // Validate endpoint
+    if (!endpoint || typeof endpoint !== 'string') {
+      throw new Error('Endpoint must be a non-empty string')
+    }
+    
     const { page = 1, pageSize = 1000, conditions, orderBy, fields } = options
+    
+    // Validate config is still present
+    if (!this.config || !this.config.baseUrl) {
+      throw new Error('ConnectWise client configuration is missing')
+    }
     
     // Get the correct codebase (cache it to avoid repeated calls)
     if (!this.codebase) {
       this.codebase = await this.getCodebase()
     }
     
-    const url = new URL(`${this.config.baseUrl}/${this.codebase}apis/3.0${endpoint}`)
-    console.log('[ConnectWise] Request URL:', url.toString())
+    // Validate codebase
+    if (!this.codebase) {
+      throw new Error('Failed to determine ConnectWise codebase')
+    }
+    
+    try {
+      const url = new URL(`${this.config.baseUrl}/${this.codebase}apis/3.0${endpoint}`)
+      console.log('[ConnectWise] Request URL:', url.toString())
     url.searchParams.append('page', page.toString())
     url.searchParams.append('pageSize', pageSize.toString())
     if (conditions) {
@@ -92,52 +117,65 @@ class ConnectWiseClient {
       url.searchParams.append('fields', fields)
     }
 
-    // Create base64 auth string (works in both Node.js and serverless)
-    const authString = `${this.config.companyId}+${this.config.publicKey}:${this.config.privateKey}`
-    const auth = typeof Buffer !== 'undefined' 
-      ? Buffer.from(authString).toString('base64')
-      : btoa(authString)
-
-    // Accept header: Use application/vnd.connectwise.com+json without version parameter
-    // The version is handled via the codebase in the URL path
-    const response = await fetch(url.toString(), {
-      method: 'GET',
-      headers: {
-        'Authorization': `Basic ${auth}`,
-        'Accept': 'application/vnd.connectwise.com+json',
-        'Content-Type': 'application/json',
-        'clientId': this.config.clientId,
-      },
-    })
-
-    if (!response.ok) {
-      let errorText = response.statusText
-      try {
-        const errorBody = await response.text()
-        if (errorBody) {
-          try {
-            const errorJson = JSON.parse(errorBody)
-            errorText = errorJson.message || errorJson.error || errorBody
-          } catch {
-            errorText = errorBody.length > 200 ? errorBody.substring(0, 200) + '...' : errorBody
-          }
-        }
-      } catch (parseError) {
-        console.warn('[ConnectWise] Could not parse error response')
+      // Create base64 auth string (Node.js/Vercel serverless environment)
+      const authString = `${this.config.companyId}+${this.config.publicKey}:${this.config.privateKey}`
+      
+      // Validate auth string components
+      if (!this.config.companyId || !this.config.publicKey || !this.config.privateKey) {
+        throw new Error('Missing authentication credentials')
       }
       
-      console.error('[ConnectWise] API Error:', {
-        endpoint,
-        status: response.status,
-        statusText: response.statusText,
-        errorText,
-        url: url.toString(),
-      })
-      
-      throw new Error(`ConnectWise API error (${response.status}): ${errorText}`)
-    }
+      // Buffer is always available in Node.js/Vercel serverless
+      const auth = Buffer.from(authString).toString('base64')
 
-    return response.json()
+      // Accept header: Use application/vnd.connectwise.com+json without version parameter
+      // The version is handled via the codebase in the URL path
+      const response = await fetch(url.toString(), {
+        method: 'GET',
+        headers: {
+          'Authorization': `Basic ${auth}`,
+          'Accept': 'application/vnd.connectwise.com+json',
+          'Content-Type': 'application/json',
+          'clientId': this.config.clientId,
+        },
+      })
+
+      if (!response.ok) {
+        let errorText = response.statusText
+        try {
+          const errorBody = await response.text()
+          if (errorBody) {
+            try {
+              const errorJson = JSON.parse(errorBody)
+              errorText = errorJson.message || errorJson.error || errorBody
+            } catch {
+              errorText = errorBody.length > 200 ? errorBody.substring(0, 200) + '...' : errorBody
+            }
+          }
+        } catch (parseError) {
+          console.warn('[ConnectWise] Could not parse error response')
+        }
+        
+        console.error('[ConnectWise] API Error:', {
+          endpoint,
+          status: response.status,
+          statusText: response.statusText,
+          errorText,
+          url: url.toString(),
+        })
+        
+        throw new Error(`ConnectWise API error (${response.status}): ${errorText}`)
+      }
+
+      const data = await response.json()
+      return data
+    } catch (urlError: any) {
+      // Handle URL construction or fetch errors
+      if (urlError instanceof TypeError && urlError.message.includes('Invalid URL')) {
+        throw new Error(`Invalid ConnectWise API URL: ${this.config.baseUrl}`)
+      }
+      throw urlError
+    }
   }
 
   /**
