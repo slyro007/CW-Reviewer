@@ -13,9 +13,9 @@ export default function TimeTracking() {
     ? members.find(m => m.id === selectedEngineerId)
     : null
 
-  // Auto-fetch time entries if not loaded
+  // Auto-fetch time entries if not loaded (only once)
   useEffect(() => {
-    if (entries.length === 0) {
+    if (entries.length === 0 && !isLoading) {
       const end = new Date()
       const start = subDays(end, 30)
       fetchTimeEntries({
@@ -23,7 +23,7 @@ export default function TimeTracking() {
         endDate: format(end, 'yyyy-MM-dd'),
       })
     }
-  }, [entries.length, fetchTimeEntries])
+  }, []) // Only on mount
 
   // Filter entries based on selected engineer
   const filteredEntries = selectedEngineerId === null 

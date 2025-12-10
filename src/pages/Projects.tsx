@@ -30,7 +30,7 @@ export default function Projects() {
         endDate: format(end, 'yyyy-MM-dd'),
       })
     }
-  }, [fetchTickets, fetchBoards, entries.length, fetchTimeEntries])
+  }, []) // Only on mount
 
   // Get ticket IDs that the selected engineer worked on
   const engineerTicketIds = useMemo(() => {

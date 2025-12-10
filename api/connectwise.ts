@@ -236,10 +236,10 @@ class ConnectWiseClient {
     if (startDate || endDate) {
       const dateConditions: string[] = []
       if (startDate) {
-        dateConditions.push(`dateStart >= [${startDate.toISOString()}]`)
+        dateConditions.push(`timeStart >= [${startDate.toISOString()}]`)
       }
       if (endDate) {
-        dateConditions.push(`dateStart <= [${endDate.toISOString()}]`)
+        dateConditions.push(`timeStart <= [${endDate.toISOString()}]`)
       }
       conditions = dateConditions.join(' AND ')
     }
@@ -254,8 +254,8 @@ class ConnectWiseClient {
     return this.request<any[]>('/time/entries', {
       ...options,
       conditions: conditions || undefined,
-      orderBy: 'dateStart desc',
-      fields: options.fields || 'id,member/id,ticket/id,hours,actualHours,billableOption,notes,internalNotes,dateStart,dateEnd,timeStart,timeEnd',
+      orderBy: 'timeStart desc',
+      fields: options.fields || 'id,member/id,ticket/id,hours,actualHours,billableOption,notes,internalNotes,timeStart,timeEnd',
     })
   }
 

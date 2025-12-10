@@ -18,7 +18,7 @@ interface CategoryScore {
 export default function PerformanceReview() {
   const { selectedEngineerId } = useSelectedEngineerStore()
   const { members } = useMembersStore()
-  const { entries } = useTimeEntriesStore()
+  const { entries, fetchTimeEntries } = useTimeEntriesStore()
   const { tickets, fetchTickets } = useTicketsStore()
   const [isGeneratingReview, setIsGeneratingReview] = useState(false)
   const [aiReview, setAiReview] = useState<string | null>(null)
@@ -31,7 +31,17 @@ export default function PerformanceReview() {
 
   useEffect(() => {
     fetchTickets()
-  }, [fetchTickets])
+    // Fetch time entries if not loaded (90 days for review)
+    if (entries.length === 0) {
+      const end = new Date()
+      const start = new Date()
+      start.setDate(start.getDate() - 90)
+      fetchTimeEntries({
+        startDate: start.toISOString().split('T')[0],
+        endDate: end.toISOString().split('T')[0],
+      })
+    }
+  }, []) // Only on mount
 
   // Calculate date range for review period
   const dateRange = useMemo(() => {

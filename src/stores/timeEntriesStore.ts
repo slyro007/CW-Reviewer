@@ -55,15 +55,25 @@ export const useTimeEntriesStore = create<TimeEntriesState>((set, get) => ({
       
       const entries: TimeEntry[] = data.map((e: any) => ({
         id: e.id,
-        memberId: e.member?.id || e.memberId,
-        ticketId: e.ticket?.id || e.ticketId,
-        hours: e.hours || e.actualHours || 0,
+        memberId: e.memberId || e.member?.id, // API returns memberId directly
+        ticketId: e.ticketId || e.ticket?.id,
+        hours: e.hours || 0,
         billableOption: e.billableOption,
         notes: e.notes,
         internalNotes: e.internalNotes,
         dateStart: new Date(e.dateStart),
         dateEnd: e.dateEnd ? new Date(e.dateEnd) : undefined,
       }))
+      
+      // Log sample for debugging
+      if (entries.length > 0) {
+        console.log('[TimeEntries] Sample entry:', {
+          id: entries[0].id,
+          memberId: entries[0].memberId,
+          hours: entries[0].hours,
+          date: entries[0].dateStart,
+        })
+      }
       
       set({ entries, isLoading: false })
       console.log(`✅ Fetched ${entries.length} time entries`)

@@ -36,8 +36,8 @@ export default async function handler(
       hours: e.actualHours || e.hours,
       billableOption: e.billableOption,
       notes: e.notes,
-      dateStart: e.timeStart || e.dateStart,
-      dateEnd: e.timeEnd || e.dateEnd,
+      dateStart: e.timeStart, // ConnectWise uses timeStart, not dateStart
+      dateEnd: e.timeEnd,
       internalNotes: e.internalNotes,
     }))
 

@@ -16,7 +16,7 @@ interface Achievement {
 export default function Highlights() {
   const { selectedEngineerId } = useSelectedEngineerStore()
   const { members } = useMembersStore()
-  const { entries } = useTimeEntriesStore()
+  const { entries, fetchTimeEntries } = useTimeEntriesStore()
   const { tickets, fetchTickets } = useTicketsStore()
   const [isGeneratingHighlights, setIsGeneratingHighlights] = useState(false)
   const [aiHighlights, setAiHighlights] = useState<string | null>(null)
@@ -28,7 +28,17 @@ export default function Highlights() {
 
   useEffect(() => {
     fetchTickets()
-  }, [fetchTickets])
+    // Fetch time entries if not loaded (90 days for highlights)
+    if (entries.length === 0) {
+      const end = new Date()
+      const start = new Date()
+      start.setDate(start.getDate() - 90)
+      fetchTimeEntries({
+        startDate: start.toISOString().split('T')[0],
+        endDate: end.toISOString().split('T')[0],
+      })
+    }
+  }, []) // Only on mount
 
   // Filter entries based on selected engineer
   const filteredEntries = useMemo(() => {

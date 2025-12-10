@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
 import { useMembersStore } from '@/stores/membersStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
@@ -24,7 +24,19 @@ type Granularity = 'day' | 'week' | 'month'
 export default function Trends() {
   const { selectedEngineerId } = useSelectedEngineerStore()
   const { members } = useMembersStore()
-  const { entries } = useTimeEntriesStore()
+  const { entries, fetchTimeEntries } = useTimeEntriesStore()
+
+  // Auto-fetch time entries if not loaded
+  useEffect(() => {
+    if (entries.length === 0) {
+      const end = new Date()
+      const start = subDays(end, 90) // Fetch 90 days for trends
+      fetchTimeEntries({
+        startDate: format(start, 'yyyy-MM-dd'),
+        endDate: format(end, 'yyyy-MM-dd'),
+      })
+    }
+  }, []) // Only on mount
   const [timeRange, setTimeRange] = useState<TimeRange>('30d')
   const [granularity, setGranularity] = useState<Granularity>('day')
 

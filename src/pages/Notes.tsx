@@ -13,7 +13,7 @@ export default function Notes() {
     ? members.find(m => m.id === selectedEngineerId)
     : null
 
-  // Auto-fetch time entries if not loaded
+  // Auto-fetch time entries if not loaded (only once)
   useEffect(() => {
     if (entries.length === 0) {
       const end = new Date()
@@ -23,7 +23,7 @@ export default function Notes() {
         endDate: format(end, 'yyyy-MM-dd'),
       })
     }
-  }, [entries.length, fetchTimeEntries])
+  }, []) // Only on mount
 
   // Filter entries based on selected engineer
   const filteredEntries = selectedEngineerId === null 
