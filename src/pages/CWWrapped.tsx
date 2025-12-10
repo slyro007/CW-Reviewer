@@ -1,9 +1,24 @@
+import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
+import { useMembersStore } from '@/stores/membersStore'
+
 export default function CWWrapped() {
+  const { selectedEngineerId } = useSelectedEngineerStore()
+  const { members } = useMembersStore()
+
+  // Get selected engineer name for display
+  const selectedEngineer = selectedEngineerId 
+    ? members.find(m => m.id === selectedEngineerId)
+    : null
+
   return (
     <div className="px-4 py-6 sm:px-0">
       <div className="mb-6">
         <h2 className="text-3xl font-bold text-white mb-2">CW Wrapped</h2>
-        <p className="text-gray-400">Your annual ConnectWise summary</p>
+        <p className="text-gray-400">
+          {selectedEngineer 
+            ? `Annual summary for ${selectedEngineer.firstName} ${selectedEngineer.lastName}`
+            : 'Your annual ConnectWise summary'}
+        </p>
       </div>
 
       <div className="bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 rounded-lg p-8 mb-6">

@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useMembersStore } from '@/stores/membersStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
 import { useUIStore } from '@/stores/uiStore'
+import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
 
 export default function Dashboard() {
   const { members, isLoading: membersLoading } = useMembersStore()
   const { entries, isLoading: entriesLoading, setDateRange } = useTimeEntriesStore()
   const { setDateRange: setUIDateRange } = useUIStore()
+  const { selectedEngineerId } = useSelectedEngineerStore()
   const [selectedDateRange, setSelectedDateRange] = useState<{ start: string; end: string }>({
     start: '',
     end: '',
@@ -26,15 +28,40 @@ export default function Dashboard() {
     }
   }
 
-  const totalHours = entries.reduce((sum, entry) => sum + entry.hours, 0)
-  const billableHours = entries.filter(e => e.billableOption === 'Billable')
+  // Filter entries based on selected engineer
+  const filteredEntries = useMemo(() => {
+    if (selectedEngineerId === null) {
+      return entries // Show all entries
+    }
+    return entries.filter(entry => entry.memberId === selectedEngineerId)
+  }, [entries, selectedEngineerId])
+
+  // Filter members based on selected engineer
+  const filteredMembers = useMemo(() => {
+    if (selectedEngineerId === null) {
+      return members // Show all members
+    }
+    return members.filter(member => member.id === selectedEngineerId)
+  }, [members, selectedEngineerId])
+
+  const totalHours = filteredEntries.reduce((sum, entry) => sum + entry.hours, 0)
+  const billableHours = filteredEntries.filter(e => e.billableOption === 'Billable')
     .reduce((sum, entry) => sum + entry.hours, 0)
+
+  // Get selected engineer name for display
+  const selectedEngineer = selectedEngineerId 
+    ? members.find(m => m.id === selectedEngineerId)
+    : null
 
   return (
     <div className="px-4 py-6 sm:px-0">
       <div className="mb-6">
         <h2 className="text-3xl font-bold text-white mb-2">Dashboard</h2>
-        <p className="text-gray-400">Overview of engineers, time entries, and projects</p>
+        <p className="text-gray-400">
+          {selectedEngineer 
+            ? `Overview for ${selectedEngineer.firstName} ${selectedEngineer.lastName}`
+            : 'Overview of engineers, time entries, and projects'}
+        </p>
       </div>
 
       {/* Date Range Picker */}
@@ -79,7 +106,7 @@ export default function Dashboard() {
         <div className="bg-gray-800 rounded-lg p-6">
           <h3 className="text-sm font-medium text-gray-400 mb-2">Total Engineers</h3>
           <p className="text-3xl font-bold text-white">
-            {membersLoading ? '...' : members.length}
+            {membersLoading ? '...' : filteredMembers.length}
           </p>
         </div>
         <div className="bg-gray-800 rounded-lg p-6">
@@ -97,7 +124,7 @@ export default function Dashboard() {
         <div className="bg-gray-800 rounded-lg p-6">
           <h3 className="text-sm font-medium text-gray-400 mb-2">Time Entries</h3>
           <p className="text-3xl font-bold text-white">
-            {entriesLoading ? '...' : entries.length}
+            {entriesLoading ? '...' : filteredEntries.length}
           </p>
         </div>
       </div>
@@ -113,10 +140,10 @@ export default function Dashboard() {
         <div className="space-y-2">
           {membersLoading ? (
             <p className="text-gray-400">Loading engineers...</p>
-          ) : members.length === 0 ? (
+          ) : filteredMembers.length === 0 ? (
             <p className="text-gray-400">No engineers found</p>
           ) : (
-            members.map((member) => (
+            filteredMembers.map((member) => (
               <div
                 key={member.id}
                 className="bg-gray-700 rounded p-4 flex justify-between items-center"
@@ -142,7 +169,7 @@ export default function Dashboard() {
         <div className="space-y-2">
           {entriesLoading ? (
             <p className="text-gray-400">Loading time entries...</p>
-          ) : entries.length === 0 ? (
+          ) : filteredEntries.length === 0 ? (
             <p className="text-gray-400">No time entries found</p>
           ) : (
             <div className="overflow-x-auto">
@@ -150,21 +177,25 @@ export default function Dashboard() {
                 <thead>
                   <tr className="border-b border-gray-700">
                     <th className="text-left py-2 px-4 text-gray-400">Date</th>
-                    <th className="text-left py-2 px-4 text-gray-400">Engineer</th>
+                    {selectedEngineerId === null && (
+                      <th className="text-left py-2 px-4 text-gray-400">Engineer</th>
+                    )}
                     <th className="text-left py-2 px-4 text-gray-400">Hours</th>
                     <th className="text-left py-2 px-4 text-gray-400">Billable</th>
                     <th className="text-left py-2 px-4 text-gray-400">Notes</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {entries.slice(0, 10).map((entry) => (
+                  {filteredEntries.slice(0, 10).map((entry) => (
                     <tr key={entry.id} className="border-b border-gray-700">
                       <td className="py-2 px-4">
                         {new Date(entry.dateStart).toLocaleDateString()}
                       </td>
-                      <td className="py-2 px-4">
-                        {members.find(m => m.id === entry.memberId)?.firstName || 'Unknown'}
-                      </td>
+                      {selectedEngineerId === null && (
+                        <td className="py-2 px-4">
+                          {members.find(m => m.id === entry.memberId)?.firstName || 'Unknown'}
+                        </td>
+                      )}
                       <td className="py-2 px-4">{entry.hours}</td>
                       <td className="py-2 px-4">
                         <span className={`px-2 py-1 rounded text-xs ${
