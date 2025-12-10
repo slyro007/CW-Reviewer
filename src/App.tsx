@@ -3,6 +3,7 @@ import Dashboard from './pages/Dashboard'
 import CWWrapped from './pages/CWWrapped'
 import TimeTracking from './pages/TimeTracking'
 import Projects from './pages/Projects'
+import ServiceTickets from './pages/ServiceTickets'
 import Notes from './pages/Notes'
 import Compare from './pages/Compare'
 import Trends from './pages/Trends'
@@ -19,6 +20,7 @@ function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/time-tracking" element={<TimeTracking />} />
           <Route path="/projects" element={<Projects />} />
+          <Route path="/tickets" element={<ServiceTickets />} />
           <Route path="/notes" element={<Notes />} />
           <Route path="/compare" element={<Compare />} />
           <Route path="/trends" element={<Trends />} />

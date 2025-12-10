@@ -19,11 +19,13 @@ export default function Sidebar() {
     { path: '/', label: 'Overview', icon: '📊' },
     { path: '/time-tracking', label: 'Time Tracking', icon: '⏱️' },
     { path: '/projects', label: 'Projects', icon: '📁' },
+    { path: '/tickets', label: 'Service Tickets', icon: '🎫' },
     { path: '/notes', label: 'Notes', icon: '📝' },
     { path: '/compare', label: 'Compare', icon: '👥' },
     { path: '/trends', label: 'Trends', icon: '📈' },
     { path: '/highlights', label: 'Highlights', icon: '⭐' },
     { path: '/performance-review', label: 'Performance Review', icon: '📋' },
+    { path: '/wrapped', label: 'CW Wrapped', icon: '🎁' },
     { path: '/export', label: 'Export', icon: '💾' },
   ]
 

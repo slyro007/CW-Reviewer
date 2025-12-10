@@ -310,6 +310,64 @@ class ConnectWiseClient {
       fields: options.fields || 'id,name',
     })
   }
+
+  /**
+   * Fetch projects from ConnectWise Projects API
+   * Returns actual project management entities with status, manager, dates, etc.
+   */
+  async getProjects(
+    managerIds?: string[], // Manager identifiers like 'DSolomon', 'EHammond'
+    options: RequestOptions = {}
+  ): Promise<any[]> {
+    let conditions = ''
+    
+    if (managerIds && managerIds.length > 0) {
+      // Filter by manager identifier
+      const managerConditions = managerIds.map(id => `manager/identifier='${id}'`).join(' OR ')
+      conditions = `(${managerConditions})`
+    }
+
+    return this.request<any[]>('/project/projects', {
+      ...options,
+      conditions: conditions || undefined,
+      orderBy: options.orderBy || 'id desc',
+      // Include key project fields for analytics
+      fields: options.fields || 'id,name,status/name,company/name,manager/identifier,manager/name,board/name,estimatedStart,estimatedEnd,actualStart,actualEnd,actualHours,estimatedHours,percentComplete,type/name,closedFlag,description',
+    })
+  }
+
+  /**
+   * Fetch project phases for a specific project
+   */
+  async getProjectPhases(projectId: number, options: RequestOptions = {}): Promise<any[]> {
+    return this.request<any[]>(`/project/projects/${projectId}/phases`, {
+      ...options,
+      fields: options.fields || 'id,description,board/name,status/name,scheduledStart,scheduledEnd,actualStart,actualEnd,actualHours,budgetHours',
+    })
+  }
+
+  /**
+   * Fetch project tickets - these are tickets that belong to projects
+   * Different from service tickets - accessed via /project/tickets
+   */
+  async getProjectTickets(
+    projectId?: number,
+    options: RequestOptions = {}
+  ): Promise<any[]> {
+    let conditions = ''
+    
+    if (projectId) {
+      conditions = `project/id=${projectId}`
+    }
+
+    return this.request<any[]>('/project/tickets', {
+      ...options,
+      conditions: conditions || undefined,
+      orderBy: options.orderBy || 'id desc',
+      // Include key fields for project ticket analysis
+      fields: options.fields || 'id,summary,project/id,project/name,phase/id,phase/name,board/id,board/name,status/name,company/name,resources,closedFlag,priority/name,type/name,wbsCode,actualHours,budgetHours,dateEntered,closedDate',
+    })
+  }
 }
 
 export default ConnectWiseClient

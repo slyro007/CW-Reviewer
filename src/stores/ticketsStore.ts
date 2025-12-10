@@ -5,21 +5,37 @@ import { api } from '@/lib/api'
 // Only show tickets from this board (Projects page filter)
 const PROJECT_BOARD_NAME = 'Project Board'
 
+// Service desk boards to display in ServiceTickets page
+export const SERVICE_BOARD_NAMES = [
+  'Escalations(MS)',
+  'Helpdesk(MS)',
+  'Helpdesk(TS)',
+  'Triage',
+  'RMM-Continuum',
+  'WL Internal',
+]
+
 interface TicketsState {
   tickets: Ticket[]
+  serviceTickets: Ticket[]
   boards: Board[]
+  serviceBoardIds: number[]
   projectBoardId: number | null
   isLoading: boolean
+  isLoadingService: boolean
   error: string | null
   setTickets: (tickets: Ticket[]) => void
+  setServiceTickets: (tickets: Ticket[]) => void
   setBoards: (boards: Board[]) => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
   fetchTickets: (params?: { boardIds?: number[]; startDate?: string; endDate?: string }) => Promise<void>
   fetchBoards: () => Promise<void>
   fetchProjectBoardTickets: () => Promise<void>
+  fetchServiceBoardTickets: () => Promise<void>
   getTicketsByMember: (memberId: number, timeEntries: any[]) => Ticket[]
   getTicketStats: (tickets: Ticket[]) => TicketStats
+  getServiceBoardName: (boardId: number) => string
 }
 
 export interface TicketStats {
@@ -32,12 +48,16 @@ export interface TicketStats {
 
 export const useTicketsStore = create<TicketsState>((set, get) => ({
   tickets: [],
+  serviceTickets: [],
   boards: [],
+  serviceBoardIds: [],
   projectBoardId: null,
   isLoading: false,
+  isLoadingService: false,
   error: null,
   
   setTickets: (tickets) => set({ tickets }),
+  setServiceTickets: (serviceTickets) => set({ serviceTickets }),
   setBoards: (boards) => set({ boards }),
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error }),
@@ -93,11 +113,21 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
       const projectBoard = boards.find(b => b.name === PROJECT_BOARD_NAME)
       if (projectBoard) {
         console.log(`✅ Found "${PROJECT_BOARD_NAME}" with ID: ${projectBoard.id}`)
-        set({ boards, projectBoardId: projectBoard.id })
-      } else {
-        console.warn(`⚠️ "${PROJECT_BOARD_NAME}" not found. Available boards:`, boards.map(b => b.name))
-        set({ boards })
       }
+      
+      // Find service board IDs
+      const serviceBoardIds = boards
+        .filter(b => SERVICE_BOARD_NAMES.includes(b.name))
+        .map(b => b.id)
+      
+      console.log(`✅ Found ${serviceBoardIds.length} service boards:`, 
+        boards.filter(b => serviceBoardIds.includes(b.id)).map(b => b.name))
+      
+      set({ 
+        boards, 
+        projectBoardId: projectBoard?.id || null,
+        serviceBoardIds,
+      })
     } catch (error: any) {
       console.error('Error fetching boards:', error)
     }
@@ -152,6 +182,63 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
       console.error('Error fetching project board tickets:', error)
       set({ error: error.message || 'Failed to fetch tickets', isLoading: false })
     }
+  },
+
+  // Fetch tickets from service boards only
+  fetchServiceBoardTickets: async () => {
+    const { isLoadingService, serviceBoardIds } = get()
+    if (isLoadingService) return
+    
+    // If we don't have the board IDs yet, fetch boards first
+    if (serviceBoardIds.length === 0) {
+      await get().fetchBoards()
+    }
+    
+    const boardIds = get().serviceBoardIds
+    if (boardIds.length === 0) {
+      console.error('Cannot fetch service tickets - No service boards found')
+      set({ error: 'Service boards not found' })
+      return
+    }
+    
+    set({ isLoadingService: true, error: null })
+    try {
+      console.log(`[Tickets] Fetching tickets from ${boardIds.length} service boards...`)
+      const data = await api.getTickets({ boardIds })
+      
+      const serviceTickets: Ticket[] = data.map((t: any) => ({
+        id: t.id,
+        summary: t.summary || '',
+        boardId: t.board?.id || t.boardId || 0,
+        status: t.status?.name || t.status || 'Unknown',
+        closedDate: t.closedDate ? new Date(t.closedDate) : undefined,
+        closedFlag: t.closedFlag || false,
+        dateEntered: t.dateEntered ? new Date(t.dateEntered) : undefined,
+        resolvedDate: t.resolvedDate ? new Date(t.resolvedDate) : undefined,
+        resolutionTime: t.closedDate && t.dateEntered 
+          ? (new Date(t.closedDate).getTime() - new Date(t.dateEntered).getTime()) / (1000 * 60 * 60)
+          : undefined,
+        type: t.type?.name || undefined,
+        priority: t.priority?.name || undefined,
+        owner: t.owner?.identifier || undefined,
+        company: t.company?.name || undefined,
+        estimatedHours: t.estimatedHours || undefined,
+        actualHours: t.actualHours || undefined,
+      }))
+      
+      set({ serviceTickets, isLoadingService: false })
+      console.log(`✅ Fetched ${serviceTickets.length} service tickets`)
+    } catch (error: any) {
+      console.error('Error fetching service board tickets:', error)
+      set({ error: error.message || 'Failed to fetch service tickets', isLoadingService: false })
+    }
+  },
+
+  // Get board name by ID
+  getServiceBoardName: (boardId) => {
+    const { boards } = get()
+    const board = boards.find(b => b.id === boardId)
+    return board?.name || `Board ${boardId}`
   },
   
   // Get tickets that a member worked on based on their time entries

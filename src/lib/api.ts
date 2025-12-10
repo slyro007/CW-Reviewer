@@ -110,6 +110,28 @@ export const api = {
     return fetchAPI<any[]>(`/boards${query}`)
   },
 
+  // Projects (ConnectWise Project Management)
+  getProjects: (params?: {
+    managerIds?: string[]
+  }) => {
+    const queryParams = new URLSearchParams()
+    if (params?.managerIds) queryParams.append('managerIds', params.managerIds.join(','))
+    
+    const query = queryParams.toString()
+    return fetchAPI<any[]>(`/projects${query ? `?${query}` : ''}`)
+  },
+
+  // Project Tickets (tickets that belong to projects, different from service tickets)
+  getProjectTickets: (params?: {
+    projectId?: number
+  }) => {
+    const queryParams = new URLSearchParams()
+    if (params?.projectId) queryParams.append('projectId', params.projectId.toString())
+    
+    const query = queryParams.toString()
+    return fetchAPI<any[]>(`/project-tickets${query ? `?${query}` : ''}`)
+  },
+
   // Analysis
   generateAnalysis: (template: string, data: any, options?: any) =>
     fetchAPI<{ analysis: string }>('/analyze', {

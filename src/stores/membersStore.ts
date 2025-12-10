@@ -2,14 +2,14 @@ import { create } from 'zustand'
 import type { Member } from '@/types'
 import { api } from '@/lib/api'
 
-// Only these 7 engineers should appear in the app
+// Only these 7 engineers should appear in the app (case-insensitive matching)
 const ALLOWED_MEMBER_IDENTIFIERS = [
-  'BWolff',    // Bryan Wolff
-  'KMoreno',   // Kevin Moreno
-  'SCano',     // Shyanne Johnson-Cano
-  'PCounts',   // Philip Counts
-  'EHammond',  // Ezekiel Hammond
-  'DCooper',   // Daniel Cooper
+  'bwolff',    // Bryan Wolff
+  'kmoreno',   // Kevin Moreno
+  'scano',     // Shyanne Johnson-Cano
+  'pcounts',   // Philip Counts
+  'ehammond',  // Ezekiel Hammond
+  'dcooper',   // Daniel Cooper
   'dsolomon',  // Daniel Solomon
 ]
 
@@ -66,9 +66,9 @@ export const useMembersStore = create<MembersState>((set, get) => ({
         inactiveFlag: m.inactiveFlag || false,
       }))
       
-      // Filter to only include the 6 allowed engineers
+      // Filter to only include the allowed engineers (case-insensitive)
       const members = allMembers.filter(m => 
-        ALLOWED_MEMBER_IDENTIFIERS.includes(m.identifier)
+        ALLOWED_MEMBER_IDENTIFIERS.includes(m.identifier.toLowerCase())
       )
       
       console.log(`✅ Fetched ${allMembers.length} total members, filtered to ${members.length} allowed engineers:`)

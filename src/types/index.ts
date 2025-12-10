@@ -63,6 +63,51 @@ export interface Board {
   type: 'MS' | 'PS'
 }
 
+// ConnectWise Project types (from /project/projects API)
+export interface Project {
+  id: number
+  name: string
+  status: string
+  company?: string
+  managerIdentifier?: string
+  managerName?: string
+  boardName?: string
+  estimatedStart?: Date
+  estimatedEnd?: Date
+  actualStart?: Date
+  actualEnd?: Date
+  actualHours?: number
+  estimatedHours?: number
+  percentComplete?: number
+  type?: string
+  closedFlag: boolean
+  description?: string
+}
+
+// ConnectWise Project Ticket types (from /project/tickets API)
+// These are tickets that belong to projects, different from service tickets
+export interface ProjectTicket {
+  id: number
+  summary: string
+  projectId: number
+  projectName?: string
+  phaseId?: number
+  phaseName?: string
+  boardId?: number
+  boardName?: string
+  status: string
+  company?: string
+  resources?: string // Assigned engineers (comma-separated)
+  closedFlag: boolean
+  priority?: string
+  type?: string
+  wbsCode?: string
+  actualHours?: number
+  budgetHours?: number
+  dateEntered?: Date
+  closedDate?: Date
+}
+
 // Trend data types
 export interface TrendData {
   date: Date
