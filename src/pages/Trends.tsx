@@ -1,7 +1,8 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useEffect } from 'react'
 import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
 import { useMembersStore } from '@/stores/membersStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
+import { useTimePeriodStore } from '@/stores/timePeriodStore'
 import {
   LineChart,
   Line,
@@ -16,51 +17,42 @@ import {
   AreaChart,
   Area,
 } from 'recharts'
-import { format, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval, subDays, subMonths, subYears } from 'date-fns'
+import { format, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval } from 'date-fns'
 
-type TimeRange = '7d' | '30d' | '90d' | '6m' | '1y' | '3y'
 type Granularity = 'day' | 'week' | 'month'
 
 export default function Trends() {
   const { selectedEngineerId } = useSelectedEngineerStore()
   const { members } = useMembersStore()
   const { entries, fetchTimeEntries } = useTimeEntriesStore()
+  const { getDateRange, getPeriodLabel, timePeriod } = useTimePeriodStore()
 
-  // Auto-fetch time entries if not loaded (3 years for full trends)
-  useEffect(() => {
-    if (entries.length === 0) {
-      const end = new Date()
-      const start = subYears(end, 3)
-      fetchTimeEntries({
-        startDate: format(start, 'yyyy-MM-dd'),
-        endDate: format(end, 'yyyy-MM-dd'),
-      })
+  const dateRange = getDateRange()
+  const periodLabel = getPeriodLabel()
+
+  // Auto-determine granularity based on time period
+  const granularity: Granularity = useMemo(() => {
+    switch (timePeriod) {
+      case 'weekly': return 'day'
+      case 'monthly': return 'day'
+      case 'quarterly': return 'week'
+      case 'yearly': return 'month'
+      case 'all': return 'month'
+      default: return 'day'
     }
-  }, []) // Only on mount
-  const [timeRange, setTimeRange] = useState<TimeRange>('3y') // Default to all time (3 years)
-  const [granularity, setGranularity] = useState<Granularity>('day')
+  }, [timePeriod])
+
+  // Fetch time entries based on global date range
+  useEffect(() => {
+    fetchTimeEntries({
+      startDate: format(dateRange.start, 'yyyy-MM-dd'),
+      endDate: format(dateRange.end, 'yyyy-MM-dd'),
+    })
+  }, [dateRange.start.getTime(), dateRange.end.getTime()])
 
   const selectedEngineer = selectedEngineerId 
     ? members.find(m => m.id === selectedEngineerId)
     : null
-
-  // Calculate date range
-  const dateRange = useMemo(() => {
-    const end = new Date()
-    let start: Date
-    
-    switch (timeRange) {
-      case '7d': start = subDays(end, 7); break
-      case '30d': start = subDays(end, 30); break
-      case '90d': start = subDays(end, 90); break
-      case '6m': start = subMonths(end, 6); break
-      case '1y': start = subMonths(end, 12); break
-      case '3y': start = subYears(end, 3); break
-      default: start = subYears(end, 3) // Default to all time
-    }
-    
-    return { start, end }
-  }, [timeRange])
 
   // Filter entries by selected engineer and date range
   const filteredEntries = useMemo(() => {
@@ -156,8 +148,8 @@ export default function Trends() {
     const withNotes = filteredEntries.filter(e => e.notes && e.notes.trim().length > 0).length
     
     // Calculate trend (compare to previous period)
-    const previousStart = new Date(dateRange.start)
-    previousStart.setTime(previousStart.getTime() - (dateRange.end.getTime() - dateRange.start.getTime()))
+    const periodLength = dateRange.end.getTime() - dateRange.start.getTime()
+    const previousStart = new Date(dateRange.start.getTime() - periodLength)
     
     const previousEntries = entries.filter(e => {
       const entryDate = new Date(e.dateStart)
@@ -187,49 +179,8 @@ export default function Trends() {
           {selectedEngineer 
             ? `Trend analysis for ${selectedEngineer.firstName} ${selectedEngineer.lastName}`
             : 'Trend analysis for all engineers'}
+          {' • '}<span className="text-blue-400">{periodLabel}</span>
         </p>
-      </div>
-
-      {/* Controls */}
-      <div className="bg-gray-800 rounded-lg p-4 mb-6">
-        <div className="flex flex-wrap gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Time Range</label>
-            <div className="flex gap-2">
-              {(['7d', '30d', '90d', '6m', '1y', '3y'] as TimeRange[]).map(range => (
-                <button
-                  key={range}
-                  onClick={() => setTimeRange(range)}
-                  className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
-                    timeRange === range
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  {range}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Granularity</label>
-            <div className="flex gap-2">
-              {(['day', 'week', 'month'] as Granularity[]).map(g => (
-                <button
-                  key={g}
-                  onClick={() => setGranularity(g)}
-                  className={`px-3 py-1 rounded text-sm font-medium capitalize transition-colors ${
-                    granularity === g
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
-                >
-                  {g}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Summary Stats */}
@@ -260,7 +211,7 @@ export default function Trends() {
           <p className="text-2xl font-bold text-purple-400">{summaryStats.notesPercent.toFixed(0)}%</p>
         </div>
         <div className="bg-gray-800 rounded-lg p-4">
-          <h3 className="text-xs font-medium text-gray-400 mb-1">Avg/Day</h3>
+          <h3 className="text-xs font-medium text-gray-400 mb-1">Avg/Period</h3>
           <p className="text-2xl font-bold text-yellow-400">{summaryStats.avgHoursPerDay.toFixed(1)}h</p>
         </div>
       </div>

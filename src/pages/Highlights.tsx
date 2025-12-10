@@ -3,7 +3,9 @@ import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
 import { useMembersStore } from '@/stores/membersStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
 import { useTicketsStore } from '@/stores/ticketsStore'
+import { useTimePeriodStore } from '@/stores/timePeriodStore'
 import { api } from '@/lib/api'
+import { format } from 'date-fns'
 
 interface Achievement {
   icon: string
@@ -18,9 +20,13 @@ export default function Highlights() {
   const { members } = useMembersStore()
   const { entries, fetchTimeEntries } = useTimeEntriesStore()
   const { tickets, fetchTickets } = useTicketsStore()
+  const { getDateRange, getPeriodLabel } = useTimePeriodStore()
   const [isGeneratingHighlights, setIsGeneratingHighlights] = useState(false)
   const [aiHighlights, setAiHighlights] = useState<string | null>(null)
   const [highlightError, setHighlightError] = useState<string | null>(null)
+
+  const dateRange = getDateRange()
+  const periodLabel = getPeriodLabel()
 
   const selectedEngineer = selectedEngineerId 
     ? members.find(m => m.id === selectedEngineerId)
@@ -28,23 +34,24 @@ export default function Highlights() {
 
   useEffect(() => {
     fetchTickets()
-    // Fetch time entries if not loaded (3 years for full highlights)
-    if (entries.length === 0) {
-      const end = new Date()
-      const start = new Date()
-      start.setFullYear(start.getFullYear() - 3)
-      fetchTimeEntries({
-        startDate: start.toISOString().split('T')[0],
-        endDate: end.toISOString().split('T')[0],
-      })
-    }
-  }, []) // Only on mount
+    fetchTimeEntries({
+      startDate: format(dateRange.start, 'yyyy-MM-dd'),
+      endDate: format(dateRange.end, 'yyyy-MM-dd'),
+    })
+  }, [dateRange.start.getTime(), dateRange.end.getTime()])
 
-  // Filter entries based on selected engineer
+  // Filter entries based on selected engineer and date range
   const filteredEntries = useMemo(() => {
-    if (selectedEngineerId === null) return entries
-    return entries.filter(e => e.memberId === selectedEngineerId)
-  }, [entries, selectedEngineerId])
+    let result = entries.filter(e => {
+      const entryDate = new Date(e.dateStart)
+      return entryDate >= dateRange.start && entryDate <= dateRange.end
+    })
+    
+    if (selectedEngineerId !== null) {
+      result = result.filter(e => e.memberId === selectedEngineerId)
+    }
+    return result
+  }, [entries, selectedEngineerId, dateRange])
 
   // Calculate achievements/highlights
   const achievements = useMemo((): Achievement[] => {
@@ -62,16 +69,13 @@ export default function Highlights() {
     const uniqueTicketIds = new Set(filteredEntries.filter(e => e.ticketId).map(e => e.ticketId))
     const ticketCount = uniqueTicketIds.size
     
-    // Get closed tickets worked on
     const workedTickets = tickets.filter(t => uniqueTicketIds.has(t.id))
     const closedTickets = workedTickets.filter(t => t.closedFlag)
     
-    // Find longest note
     const longestNote = withNotes.reduce((longest, e) => {
       return (e.notes?.length || 0) > (longest?.notes?.length || 0) ? e : longest
     }, withNotes[0])
     
-    // Calculate busiest day
     const hoursByDate: Record<string, number> = {}
     filteredEntries.forEach(e => {
       const date = new Date(e.dateStart).toLocaleDateString()
@@ -82,7 +86,6 @@ export default function Highlights() {
       { date: '', hours: 0 }
     )
     
-    // Calculate streak (consecutive days with entries)
     const sortedDates = [...new Set(filteredEntries.map(e => 
       new Date(e.dateStart).toDateString()
     ))].sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
@@ -104,7 +107,6 @@ export default function Highlights() {
 
     const achievements: Achievement[] = []
 
-    // Total Hours Achievement
     if (totalHours > 0) {
       achievements.push({
         icon: '⏱️',
@@ -115,7 +117,6 @@ export default function Highlights() {
       })
     }
 
-    // Billable Excellence
     if (billablePercent >= 70) {
       achievements.push({
         icon: '💰',
@@ -134,7 +135,6 @@ export default function Highlights() {
       })
     }
 
-    // Ticket Master
     if (ticketCount > 0) {
       achievements.push({
         icon: '🎫',
@@ -145,7 +145,6 @@ export default function Highlights() {
       })
     }
 
-    // Problem Solver
     if (closedTickets.length > 0) {
       achievements.push({
         icon: '✅',
@@ -156,7 +155,6 @@ export default function Highlights() {
       })
     }
 
-    // Documentation Hero
     if (notesPercent >= 80) {
       achievements.push({
         icon: '📝',
@@ -175,7 +173,6 @@ export default function Highlights() {
       })
     }
 
-    // Busiest Day
     if (busiestDay.hours > 0) {
       achievements.push({
         icon: '🔥',
@@ -186,7 +183,6 @@ export default function Highlights() {
       })
     }
 
-    // Streak Achievement
     if (maxStreak >= 5) {
       achievements.push({
         icon: '⚡',
@@ -197,7 +193,6 @@ export default function Highlights() {
       })
     }
 
-    // Entry Count
     if (filteredEntries.length > 0) {
       achievements.push({
         icon: '📊',
@@ -208,7 +203,6 @@ export default function Highlights() {
       })
     }
 
-    // Longest Note
     if (longestNote && longestNote.notes && longestNote.notes.length > 200) {
       achievements.push({
         icon: '📚',
@@ -225,9 +219,9 @@ export default function Highlights() {
   // Calculate fun stats
   const funStats = useMemo(() => {
     const totalHours = filteredEntries.reduce((sum, e) => sum + e.hours, 0)
-    const coffees = Math.round(totalHours / 2) // Assume 1 coffee per 2 hours
-    const meetings = Math.round(totalHours / 8) // Assume 1 meeting per day
-    const keystrokes = Math.round(totalHours * 3000) // Rough estimate
+    const coffees = Math.round(totalHours / 2)
+    const meetings = Math.round(totalHours / 8)
+    const keystrokes = Math.round(totalHours * 3000)
 
     return { coffees, meetings, keystrokes, totalHours }
   }, [filteredEntries])
@@ -239,6 +233,7 @@ export default function Highlights() {
     
     try {
       const stats = {
+        period: periodLabel,
         totalHours: filteredEntries.reduce((sum, e) => sum + e.hours, 0),
         billableHours: filteredEntries.filter(e => e.billableOption === 'Billable')
           .reduce((sum, e) => sum + e.hours, 0),
@@ -275,6 +270,7 @@ export default function Highlights() {
           {selectedEngineer 
             ? `Celebrating ${selectedEngineer.firstName} ${selectedEngineer.lastName}'s accomplishments`
             : 'Celebrating team accomplishments'}
+          {' • '}<span className="text-blue-400">{periodLabel}</span>
         </p>
       </div>
 
@@ -282,7 +278,7 @@ export default function Highlights() {
       <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-blue-900 rounded-xl p-6 mb-6 relative overflow-hidden">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Ccircle%20cx%3D%221%22%20cy%3D%221%22%20r%3D%221%22%20fill%3D%22rgba(255%2C255%2C255%2C0.1)%22%2F%3E%3C%2Fsvg%3E')] opacity-30"></div>
         <div className="relative z-10">
-          <h3 className="text-2xl font-bold text-white mb-4">🎉 Your Year in Numbers</h3>
+          <h3 className="text-2xl font-bold text-white mb-4">🎉 Your {periodLabel} in Numbers</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center">
               <p className="text-4xl font-bold text-white">{funStats.totalHours.toFixed(0)}</p>
@@ -324,7 +320,7 @@ export default function Highlights() {
       ) : (
         <div className="bg-gray-800 rounded-lg p-12 text-center mb-6">
           <p className="text-gray-400 text-lg">
-            No achievements yet. Start logging time to earn badges!
+            No achievements yet for {periodLabel.toLowerCase()}. Start logging time to earn badges!
           </p>
         </div>
       )}
@@ -338,7 +334,7 @@ export default function Highlights() {
             {(() => {
               const memberHours = members.map(m => ({
                 ...m,
-                hours: entries.filter(e => e.memberId === m.id).reduce((sum, e) => sum + e.hours, 0)
+                hours: filteredEntries.filter(e => e.memberId === m.id).reduce((sum, e) => sum + e.hours, 0)
               })).sort((a, b) => b.hours - a.hours)
               const top = memberHours[0]
               if (!top || top.hours === 0) return null
@@ -354,7 +350,7 @@ export default function Highlights() {
             {/* Best Billable */}
             {(() => {
               const memberBillable = members.map(m => {
-                const memberEntries = entries.filter(e => e.memberId === m.id)
+                const memberEntries = filteredEntries.filter(e => e.memberId === m.id)
                 const total = memberEntries.reduce((sum, e) => sum + e.hours, 0)
                 const billable = memberEntries.filter(e => e.billableOption === 'Billable')
                   .reduce((sum, e) => sum + e.hours, 0)
@@ -374,7 +370,7 @@ export default function Highlights() {
             {/* Best Notes */}
             {(() => {
               const memberNotes = members.map(m => {
-                const memberEntries = entries.filter(e => e.memberId === m.id)
+                const memberEntries = filteredEntries.filter(e => e.memberId === m.id)
                 const withNotes = memberEntries.filter(e => e.notes && e.notes.trim().length > 0).length
                 return { ...m, percent: memberEntries.length > 0 ? (withNotes / memberEntries.length) * 100 : 0, total: memberEntries.length }
               }).filter(m => m.total > 10).sort((a, b) => b.percent - a.percent)

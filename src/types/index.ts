@@ -47,6 +47,13 @@ export interface Ticket {
   dateEntered?: Date
   resolvedDate?: Date
   resolutionTime?: number // in hours
+  // Additional project fields
+  type?: string // Project type/category
+  priority?: string
+  owner?: string // Owner identifier
+  company?: string // Client/company name
+  estimatedHours?: number
+  actualHours?: number
 }
 
 // Board types

@@ -3,7 +3,9 @@ import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
 import { useMembersStore } from '@/stores/membersStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
 import { useTicketsStore } from '@/stores/ticketsStore'
+import { useTimePeriodStore } from '@/stores/timePeriodStore'
 import { api } from '@/lib/api'
+import { format } from 'date-fns'
 
 interface CategoryScore {
   name: string
@@ -20,10 +22,13 @@ export default function PerformanceReview() {
   const { members } = useMembersStore()
   const { entries, fetchTimeEntries } = useTimeEntriesStore()
   const { tickets, fetchTickets } = useTicketsStore()
+  const { getDateRange, getPeriodLabel } = useTimePeriodStore()
   const [isGeneratingReview, setIsGeneratingReview] = useState(false)
   const [aiReview, setAiReview] = useState<string | null>(null)
   const [reviewError, setReviewError] = useState<string | null>(null)
-  const [reviewPeriod, setReviewPeriod] = useState<'30d' | '90d' | '6m' | '1y'>('90d')
+
+  const dateRange = getDateRange()
+  const periodLabel = getPeriodLabel()
 
   const selectedEngineer = selectedEngineerId 
     ? members.find(m => m.id === selectedEngineerId)
@@ -31,32 +36,11 @@ export default function PerformanceReview() {
 
   useEffect(() => {
     fetchTickets()
-    // Fetch time entries if not loaded (3 years for full review history)
-    if (entries.length === 0) {
-      const end = new Date()
-      const start = new Date()
-      start.setFullYear(start.getFullYear() - 3)
-      fetchTimeEntries({
-        startDate: start.toISOString().split('T')[0],
-        endDate: end.toISOString().split('T')[0],
-      })
-    }
-  }, []) // Only on mount
-
-  // Calculate date range for review period
-  const dateRange = useMemo(() => {
-    const end = new Date()
-    const start = new Date()
-    
-    switch (reviewPeriod) {
-      case '30d': start.setDate(start.getDate() - 30); break
-      case '90d': start.setDate(start.getDate() - 90); break
-      case '6m': start.setMonth(start.getMonth() - 6); break
-      case '1y': start.setFullYear(start.getFullYear() - 1); break
-    }
-    
-    return { start, end }
-  }, [reviewPeriod])
+    fetchTimeEntries({
+      startDate: format(dateRange.start, 'yyyy-MM-dd'),
+      endDate: format(dateRange.end, 'yyyy-MM-dd'),
+    })
+  }, [dateRange.start.getTime(), dateRange.end.getTime()])
 
   // Filter entries by engineer and date range
   const filteredEntries = useMemo(() => {
@@ -85,17 +69,14 @@ export default function PerformanceReview() {
       ? (withNotes.length / filteredEntries.length) * 100 
       : 0
     
-    // Average note length for entries with notes
     const avgNoteLength = withNotes.length > 0
       ? withNotes.reduce((sum, e) => sum + (e.notes?.length || 0), 0) / withNotes.length
       : 0
     
-    // Tickets worked on
     const uniqueTicketIds = new Set(filteredEntries.filter(e => e.ticketId).map(e => e.ticketId))
     const workedTickets = tickets.filter(t => uniqueTicketIds.has(t.id))
     const closedTickets = workedTickets.filter(t => t.closedFlag)
     
-    // Calculate days in period
     const daysInPeriod = Math.ceil((dateRange.end.getTime() - dateRange.start.getTime()) / (1000 * 60 * 60 * 24))
     const avgHoursPerDay = totalHours / daysInPeriod
 
@@ -103,9 +84,9 @@ export default function PerformanceReview() {
 
     // Time Tracking Score
     const timeTrackingScore = Math.min(100, Math.round(
-      (avgHoursPerDay >= 6 ? 40 : (avgHoursPerDay / 6) * 40) + // 40 points for avg 6+ hours/day
-      (filteredEntries.length >= daysInPeriod * 0.7 ? 30 : (filteredEntries.length / (daysInPeriod * 0.7)) * 30) + // 30 points for consistency
-      (totalHours > 0 ? 30 : 0) // 30 points for any tracking
+      (avgHoursPerDay >= 6 ? 40 : (avgHoursPerDay / 6) * 40) +
+      (filteredEntries.length >= daysInPeriod * 0.7 ? 30 : (filteredEntries.length / (daysInPeriod * 0.7)) * 30) +
+      (totalHours > 0 ? 30 : 0)
     ))
     
     const timeIssues: string[] = []
@@ -131,9 +112,9 @@ export default function PerformanceReview() {
 
     // Notes Quality Score
     const notesScore = Math.min(100, Math.round(
-      (notesPercent >= 90 ? 50 : (notesPercent / 90) * 50) + // 50 points for 90%+ entries with notes
-      (avgNoteLength >= 50 ? 30 : (avgNoteLength / 50) * 30) + // 30 points for avg 50+ char notes
-      (avgNoteLength >= 100 ? 20 : (avgNoteLength / 100) * 20) // 20 bonus for detailed notes
+      (notesPercent >= 90 ? 50 : (notesPercent / 90) * 50) +
+      (avgNoteLength >= 50 ? 30 : (avgNoteLength / 50) * 30) +
+      (avgNoteLength >= 100 ? 20 : (avgNoteLength / 100) * 20)
     ))
     
     const notesIssues: string[] = []
@@ -191,9 +172,9 @@ export default function PerformanceReview() {
       : 0
     
     const productivityScore = Math.min(100, Math.round(
-      (uniqueTicketIds.size >= 20 ? 40 : (uniqueTicketIds.size / 20) * 40) + // 40 points for ticket volume
-      (ticketResolutionRate >= 70 ? 40 : (ticketResolutionRate / 70) * 40) + // 40 points for resolution rate
-      (closedTickets.length >= 10 ? 20 : (closedTickets.length / 10) * 20) // 20 points for absolute closures
+      (uniqueTicketIds.size >= 20 ? 40 : (uniqueTicketIds.size / 20) * 40) +
+      (ticketResolutionRate >= 70 ? 40 : (ticketResolutionRate / 70) * 40) +
+      (closedTickets.length >= 10 ? 20 : (closedTickets.length / 10) * 20)
     ))
     
     const prodIssues: string[] = []
@@ -253,7 +234,7 @@ export default function PerformanceReview() {
     try {
       const response = await api.generateAnalysis('mspStandardsReview', {
         member: selectedEngineer,
-        entries: filteredEntries.slice(0, 50), // Limit for API
+        entries: filteredEntries.slice(0, 50),
         tickets: tickets.filter(t => 
           filteredEntries.some(e => e.ticketId === t.id)
         ).slice(0, 20),
@@ -279,6 +260,7 @@ export default function PerformanceReview() {
           <h2 className="text-3xl font-bold text-white mb-2">Performance Review</h2>
           <p className="text-gray-400">
             Select an engineer from the sidebar to view their performance review
+            {' • '}<span className="text-blue-400">{periodLabel}</span>
           </p>
         </div>
         
@@ -298,32 +280,8 @@ export default function PerformanceReview() {
         <h2 className="text-3xl font-bold text-white mb-2">Performance Review</h2>
         <p className="text-gray-400">
           Performance evaluation for {selectedEngineer?.firstName} {selectedEngineer?.lastName}
+          {' • '}<span className="text-blue-400">{periodLabel}</span>
         </p>
-      </div>
-
-      {/* Review Period Selector */}
-      <div className="bg-gray-800 rounded-lg p-4 mb-6">
-        <div className="flex items-center gap-4">
-          <span className="text-gray-400">Review Period:</span>
-          <div className="flex gap-2">
-            {(['30d', '90d', '6m', '1y'] as const).map(period => (
-              <button
-                key={period}
-                onClick={() => setReviewPeriod(period)}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  reviewPeriod === period
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                {period === '30d' ? 'Last 30 Days' :
-                 period === '90d' ? 'Last Quarter' :
-                 period === '6m' ? 'Last 6 Months' :
-                 'Last Year'}
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
 
       {/* Overall Score */}

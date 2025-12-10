@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { useMembersStore } from '@/stores/membersStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
+import { useTimePeriodStore } from '@/stores/timePeriodStore'
 import { api } from '@/lib/api'
+import { format } from 'date-fns'
 import {
   BarChart,
   Bar,
@@ -34,16 +36,36 @@ interface EngineerStats {
 
 export default function Compare() {
   const { members, selectedMembers, toggleMemberSelection, clearSelection } = useMembersStore()
-  const { entries } = useTimeEntriesStore()
+  const { entries, fetchTimeEntries } = useTimeEntriesStore()
+  const { getDateRange, getPeriodLabel } = useTimePeriodStore()
   const [isGeneratingInsights, setIsGeneratingInsights] = useState(false)
   const [aiInsights, setAiInsights] = useState<string | null>(null)
   const [insightError, setInsightError] = useState<string | null>(null)
+
+  const dateRange = getDateRange()
+  const periodLabel = getPeriodLabel()
+
+  // Fetch time entries based on global date range
+  useEffect(() => {
+    fetchTimeEntries({
+      startDate: format(dateRange.start, 'yyyy-MM-dd'),
+      endDate: format(dateRange.end, 'yyyy-MM-dd'),
+    })
+  }, [dateRange.start.getTime(), dateRange.end.getTime()])
+
+  // Filter entries by date range
+  const filteredEntries = useMemo(() => {
+    return entries.filter(e => {
+      const entryDate = new Date(e.dateStart)
+      return entryDate >= dateRange.start && entryDate <= dateRange.end
+    })
+  }, [entries, dateRange])
 
   // Calculate stats for each selected member
   const engineerStats = useMemo((): EngineerStats[] => {
     return selectedMembers.map(memberId => {
       const member = members.find(m => m.id === memberId)
-      const memberEntries = entries.filter(e => e.memberId === memberId)
+      const memberEntries = filteredEntries.filter(e => e.memberId === memberId)
       
       const totalHours = memberEntries.reduce((sum, e) => sum + e.hours, 0)
       const billableHours = memberEntries
@@ -64,23 +86,22 @@ export default function Compare() {
         uniqueTickets,
       }
     })
-  }, [selectedMembers, members, entries])
+  }, [selectedMembers, members, filteredEntries])
 
   // Prepare chart data
   const barChartData = useMemo(() => {
     return engineerStats.map(stats => ({
-      name: stats.name.split(' ')[0], // First name only for space
+      name: stats.name.split(' ')[0],
       totalHours: Number(stats.totalHours.toFixed(1)),
       billableHours: Number(stats.billableHours.toFixed(1)),
       nonBillableHours: Number((stats.totalHours - stats.billableHours).toFixed(1)),
     }))
   }, [engineerStats])
 
-  // Prepare radar chart data (normalized to 0-100)
+  // Prepare radar chart data
   const radarData = useMemo(() => {
     if (engineerStats.length === 0) return []
     
-    // Find max values for normalization
     const maxHours = Math.max(...engineerStats.map(s => s.totalHours), 1)
     const maxEntries = Math.max(...engineerStats.map(s => s.entryCount), 1)
     const maxTickets = Math.max(...engineerStats.map(s => s.uniqueTickets), 1)
@@ -131,6 +152,7 @@ export default function Compare() {
     
     try {
       const comparisonData = {
+        period: periodLabel,
         engineers: engineerStats,
         summary: {
           avgTotalHours: engineerStats.reduce((sum, s) => sum + s.totalHours, 0) / engineerStats.length,
@@ -172,6 +194,7 @@ export default function Compare() {
         <h2 className="text-3xl font-bold text-white mb-2">Compare Engineers</h2>
         <p className="text-gray-400">
           Select engineers to compare their performance metrics side by side
+          {' • '}<span className="text-blue-400">{periodLabel}</span>
         </p>
       </div>
 

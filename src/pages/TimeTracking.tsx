@@ -2,10 +2,9 @@ import { useEffect, useState, useMemo } from 'react'
 import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
 import { useMembersStore } from '@/stores/membersStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
-import { format, subYears, startOfQuarter, startOfYear, startOfMonth, startOfWeek } from 'date-fns'
+import { useTimePeriodStore } from '@/stores/timePeriodStore'
+import { format } from 'date-fns'
 import { api } from '@/lib/api'
-
-type TimePeriod = 'all' | 'yearly' | 'quarterly' | 'monthly' | 'weekly'
 
 interface EngineerAnalytics {
   memberId: number
@@ -23,54 +22,25 @@ export default function TimeTracking() {
   const { selectedEngineerId } = useSelectedEngineerStore()
   const { members } = useMembersStore()
   const { entries, isLoading, fetchTimeEntries } = useTimeEntriesStore()
-  const [timePeriod, setTimePeriod] = useState<TimePeriod>('all')
+  const { getDateRange, getPeriodLabel } = useTimePeriodStore()
   const [isGeneratingAnalysis, setIsGeneratingAnalysis] = useState(false)
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
+
+  const dateRange = getDateRange()
+  const periodLabel = getPeriodLabel()
 
   const selectedEngineer = selectedEngineerId 
     ? members.find(m => m.id === selectedEngineerId)
     : null
 
-  // Auto-fetch time entries if not loaded (3 years for full history)
+  // Auto-fetch time entries based on global date range
   useEffect(() => {
-    if (entries.length === 0 && !isLoading) {
-      const end = new Date()
-      const start = subYears(end, 3)
-      fetchTimeEntries({
-        startDate: format(start, 'yyyy-MM-dd'),
-        endDate: format(end, 'yyyy-MM-dd'),
-      })
-    }
-  }, []) // Only on mount
-
-  // Calculate date range based on selected period
-  const dateRange = useMemo(() => {
-    const end = new Date()
-    let start: Date
-    
-    switch (timePeriod) {
-      case 'all':
-        start = subYears(end, 3)
-        break
-      case 'yearly':
-        start = startOfYear(end)
-        break
-      case 'quarterly':
-        start = startOfQuarter(end)
-        break
-      case 'monthly':
-        start = startOfMonth(end)
-        break
-      case 'weekly':
-        start = startOfWeek(end)
-        break
-      default:
-        start = subYears(end, 3)
-    }
-    
-    return { start, end }
-  }, [timePeriod])
+    fetchTimeEntries({
+      startDate: format(dateRange.start, 'yyyy-MM-dd'),
+      endDate: format(dateRange.end, 'yyyy-MM-dd'),
+    })
+  }, [dateRange.start.getTime(), dateRange.end.getTime()])
 
   // Filter entries based on selected engineer and date range
   const filteredEntries = useMemo(() => {
@@ -123,9 +93,6 @@ export default function TimeTracking() {
     const billableHours = engineerAnalytics.reduce((sum, e) => sum + e.billableHours, 0)
     const totalEntries = engineerAnalytics.reduce((sum, e) => sum + e.entriesCount, 0)
     const withNotes = filteredEntries.filter(e => e.notes && e.notes.trim().length > 0).length
-    const avgDaysWorked = engineerAnalytics.length > 0 
-      ? engineerAnalytics.reduce((sum, e) => sum + e.daysWorked, 0) / engineerAnalytics.length 
-      : 0
 
     return {
       totalHours,
@@ -133,7 +100,6 @@ export default function TimeTracking() {
       billablePercent: totalHours > 0 ? (billableHours / totalHours) * 100 : 0,
       totalEntries,
       notesPercent: totalEntries > 0 ? (withNotes / totalEntries) * 100 : 0,
-      avgDaysWorked,
       engineerCount: engineerAnalytics.length,
     }
   }, [engineerAnalytics, filteredEntries])
@@ -145,10 +111,7 @@ export default function TimeTracking() {
     
     try {
       const analysisData = {
-        period: timePeriod === 'all' ? 'All Time (3 years)' : 
-                timePeriod === 'yearly' ? 'This Year' :
-                timePeriod === 'quarterly' ? 'This Quarter' :
-                timePeriod === 'monthly' ? 'This Month' : 'This Week',
+        period: periodLabel,
         dateRange: {
           start: dateRange.start.toISOString(),
           end: dateRange.end.toISOString(),
@@ -166,7 +129,7 @@ export default function TimeTracking() {
       }
 
       const prompt = selectedEngineer
-        ? `Analyze the time tracking performance for ${selectedEngineer.firstName} ${selectedEngineer.lastName} for ${analysisData.period}. 
+        ? `Analyze the time tracking performance for ${selectedEngineer.firstName} ${selectedEngineer.lastName} for ${periodLabel}. 
            
            Stats:
            - Total Hours: ${engineerAnalytics[0]?.totalHours.toFixed(1) || 0}
@@ -183,7 +146,7 @@ export default function TimeTracking() {
            5. Comparison to typical MSP engineer benchmarks
            
            Keep the tone professional and constructive.`
-        : `Analyze the team's time tracking performance for ${analysisData.period}.
+        : `Analyze the team's time tracking performance for ${periodLabel}.
            
            Team Stats:
            - Total Hours: ${aggregateStats.totalHours.toFixed(1)}
@@ -217,18 +180,6 @@ export default function TimeTracking() {
     }
   }
 
-  // Get period label
-  const getPeriodLabel = (period: TimePeriod): string => {
-    switch (period) {
-      case 'all': return 'All Time'
-      case 'yearly': return 'This Year'
-      case 'quarterly': return 'This Quarter'
-      case 'monthly': return 'This Month'
-      case 'weekly': return 'This Week'
-      default: return period
-    }
-  }
-
   // Get performance rating
   const getPerformanceRating = (analytics: EngineerAnalytics): { label: string; color: string } => {
     const score = (analytics.billablePercent * 0.4) + (analytics.notesPercent * 0.3) + (Math.min(analytics.avgHoursPerDay / 8, 1) * 100 * 0.3)
@@ -246,34 +197,7 @@ export default function TimeTracking() {
           {selectedEngineer 
             ? `Performance analysis for ${selectedEngineer.firstName} ${selectedEngineer.lastName}`
             : 'Team performance analytics and insights'}
-        </p>
-      </div>
-
-      {/* Time Period Selector */}
-      <div className="bg-gray-800 rounded-lg p-4 mb-6">
-        <div className="flex items-center gap-4 flex-wrap">
-          <span className="text-gray-400 font-medium">Time Period:</span>
-          <div className="flex gap-2 flex-wrap">
-            {(['all', 'yearly', 'quarterly', 'monthly', 'weekly'] as TimePeriod[]).map(period => (
-              <button
-                key={period}
-                onClick={() => {
-                  setTimePeriod(period)
-                  setAiAnalysis(null) // Reset analysis when period changes
-                }}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                  timePeriod === period
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                }`}
-              >
-                {getPeriodLabel(period)}
-              </button>
-            ))}
-          </div>
-        </div>
-        <p className="text-sm text-gray-500 mt-2">
-          Showing data from {format(dateRange.start, 'MMM d, yyyy')} to {format(dateRange.end, 'MMM d, yyyy')}
+          {' • '}<span className="text-blue-400">{periodLabel}</span>
         </p>
       </div>
 
@@ -289,7 +213,7 @@ export default function TimeTracking() {
             <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl p-6">
               <h3 className="text-sm font-medium text-blue-100 mb-1">Total Hours</h3>
               <p className="text-4xl font-bold text-white">{aggregateStats.totalHours.toFixed(0)}</p>
-              <p className="text-sm text-blue-200 mt-1">{getPeriodLabel(timePeriod)}</p>
+              <p className="text-sm text-blue-200 mt-1">{periodLabel}</p>
             </div>
             <div className="bg-gradient-to-br from-green-600 to-emerald-700 rounded-xl p-6">
               <h3 className="text-sm font-medium text-green-100 mb-1">Billable %</h3>

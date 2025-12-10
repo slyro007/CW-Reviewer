@@ -53,8 +53,8 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
       const tickets: Ticket[] = data.map((t: any) => ({
         id: t.id,
         summary: t.summary || '',
-        boardId: t.boardId || 0,
-        status: t.status || 'Unknown',
+        boardId: t.board?.id || t.boardId || 0,
+        status: t.status?.name || t.status || 'Unknown',
         closedDate: t.closedDate ? new Date(t.closedDate) : undefined,
         closedFlag: t.closedFlag || false,
         dateEntered: t.dateEntered ? new Date(t.dateEntered) : undefined,
@@ -62,6 +62,13 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
         resolutionTime: t.closedDate && t.dateEntered 
           ? (new Date(t.closedDate).getTime() - new Date(t.dateEntered).getTime()) / (1000 * 60 * 60)
           : undefined,
+        // Additional project fields
+        type: t.type?.name || undefined,
+        priority: t.priority?.name || undefined,
+        owner: t.owner?.identifier || undefined,
+        company: t.company?.name || undefined,
+        estimatedHours: t.estimatedHours || undefined,
+        actualHours: t.actualHours || undefined,
       }))
       
       set({ tickets, isLoading: false })
@@ -121,8 +128,8 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
       const tickets: Ticket[] = data.map((t: any) => ({
         id: t.id,
         summary: t.summary || '',
-        boardId: t.boardId || 0,
-        status: t.status || 'Unknown',
+        boardId: t.board?.id || t.boardId || 0,
+        status: t.status?.name || t.status || 'Unknown',
         closedDate: t.closedDate ? new Date(t.closedDate) : undefined,
         closedFlag: t.closedFlag || false,
         dateEntered: t.dateEntered ? new Date(t.dateEntered) : undefined,
@@ -130,6 +137,13 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
         resolutionTime: t.closedDate && t.dateEntered 
           ? (new Date(t.closedDate).getTime() - new Date(t.dateEntered).getTime()) / (1000 * 60 * 60)
           : undefined,
+        // Additional project fields
+        type: t.type?.name || undefined,
+        priority: t.priority?.name || undefined,
+        owner: t.owner?.identifier || undefined,
+        company: t.company?.name || undefined,
+        estimatedHours: t.estimatedHours || undefined,
+        actualHours: t.actualHours || undefined,
       }))
       
       set({ tickets, isLoading: false })

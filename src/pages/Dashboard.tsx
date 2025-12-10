@@ -1,81 +1,65 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useMembersStore } from '@/stores/membersStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
-import { useUIStore } from '@/stores/uiStore'
 import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
-import { format, subYears } from 'date-fns'
+import { useTimePeriodStore } from '@/stores/timePeriodStore'
+import { format } from 'date-fns'
 
 export default function Dashboard() {
   const { members, isLoading: membersLoading, fetchMembers } = useMembersStore()
-  const { entries, isLoading: entriesLoading, setDateRange, fetchTimeEntries } = useTimeEntriesStore()
-  const { setDateRange: setUIDateRange } = useUIStore()
+  const { entries, isLoading: entriesLoading, fetchTimeEntries } = useTimeEntriesStore()
   const { selectedEngineerId } = useSelectedEngineerStore()
+  const { getDateRange, getPeriodLabel } = useTimePeriodStore()
   
-  // Default to last 3 years (all time)
-  const [selectedDateRange, setSelectedDateRange] = useState<{ start: string; end: string }>(() => {
-    const end = new Date()
-    const start = subYears(end, 3)
-    return {
-      start: format(start, 'yyyy-MM-dd'),
-      end: format(end, 'yyyy-MM-dd'),
-    }
-  })
+  const dateRange = getDateRange()
 
   useEffect(() => {
     // Fetch members on mount
     fetchMembers()
   }, [fetchMembers])
 
-  // Fetch time entries on mount and when date range changes
+  // Fetch time entries when date range changes
   useEffect(() => {
-    if (selectedDateRange.start && selectedDateRange.end) {
-      fetchTimeEntries({
-        startDate: selectedDateRange.start,
-        endDate: selectedDateRange.end,
-      })
-      
-      const start = new Date(selectedDateRange.start)
-      const end = new Date(selectedDateRange.end)
-      setDateRange(start, end)
-      setUIDateRange(start, end)
-    }
-  }, []) // Only on mount - manual trigger for changes
+    fetchTimeEntries({
+      startDate: format(dateRange.start, 'yyyy-MM-dd'),
+      endDate: format(dateRange.end, 'yyyy-MM-dd'),
+    })
+  }, [dateRange.start.getTime(), dateRange.end.getTime()])
 
-  const handleDateRangeChange = () => {
-    if (selectedDateRange.start && selectedDateRange.end) {
-      fetchTimeEntries({
-        startDate: selectedDateRange.start,
-        endDate: selectedDateRange.end,
-      })
-      
-      const start = new Date(selectedDateRange.start)
-      const end = new Date(selectedDateRange.end)
-      setDateRange(start, end)
-      setUIDateRange(start, end)
-    }
-  }
-
-  // Filter entries based on selected engineer
+  // Filter entries based on selected engineer and date range
   const filteredEntries = useMemo(() => {
-    if (selectedEngineerId === null) {
-      return entries // Show all entries
+    let result = entries.filter(e => {
+      const entryDate = new Date(e.dateStart)
+      return entryDate >= dateRange.start && entryDate <= dateRange.end
+    })
+    
+    if (selectedEngineerId !== null) {
+      result = result.filter(entry => entry.memberId === selectedEngineerId)
     }
-    return entries.filter(entry => entry.memberId === selectedEngineerId)
-  }, [entries, selectedEngineerId])
+    return result
+  }, [entries, selectedEngineerId, dateRange])
 
   // Filter members based on selected engineer
   const filteredMembers = useMemo(() => {
     if (selectedEngineerId === null) {
-      return members // Show all members
+      return members
     }
     return members.filter(member => member.id === selectedEngineerId)
   }, [members, selectedEngineerId])
+
+  // Calculate member hours
+  const membersWithHours = useMemo(() => {
+    return filteredMembers.map(member => {
+      const memberEntries = filteredEntries.filter(e => e.memberId === member.id)
+      const totalHours = memberEntries.reduce((sum, e) => sum + e.hours, 0)
+      return { ...member, totalHours }
+    })
+  }, [filteredMembers, filteredEntries])
 
   const totalHours = filteredEntries.reduce((sum, entry) => sum + entry.hours, 0)
   const billableHours = filteredEntries.filter(e => e.billableOption === 'Billable')
     .reduce((sum, entry) => sum + entry.hours, 0)
 
-  // Get selected engineer name for display
   const selectedEngineer = selectedEngineerId 
     ? members.find(m => m.id === selectedEngineerId)
     : null
@@ -88,44 +72,8 @@ export default function Dashboard() {
           {selectedEngineer 
             ? `Overview for ${selectedEngineer.firstName} ${selectedEngineer.lastName}`
             : 'Overview of engineers, time entries, and projects'}
+          {' • '}<span className="text-blue-400">{getPeriodLabel()}</span>
         </p>
-      </div>
-
-      {/* Date Range Picker */}
-      <div className="mb-6 bg-gray-800 rounded-lg p-4">
-        <h3 className="text-lg font-semibold mb-3">Date Range Filter</h3>
-        <div className="flex gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              Start Date
-            </label>
-            <input
-              type="date"
-              value={selectedDateRange.start}
-              onChange={(e) => setSelectedDateRange({ ...selectedDateRange, start: e.target.value })}
-              className="bg-gray-700 text-white rounded px-3 py-2"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">
-              End Date
-            </label>
-            <input
-              type="date"
-              value={selectedDateRange.end}
-              onChange={(e) => setSelectedDateRange({ ...selectedDateRange, end: e.target.value })}
-              className="bg-gray-700 text-white rounded px-3 py-2"
-            />
-          </div>
-          <div className="flex items-end">
-            <button
-              onClick={handleDateRangeChange}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
-            >
-              Apply Filter
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* Summary Cards */}
@@ -160,17 +108,14 @@ export default function Dashboard() {
       <div className="bg-gray-800 rounded-lg p-6 mb-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-xl font-semibold">Engineers Overview</h3>
-          <button className="text-sm text-blue-400 hover:text-blue-300">
-            Select for Comparison
-          </button>
         </div>
         <div className="space-y-2">
           {membersLoading ? (
             <p className="text-gray-400">Loading engineers...</p>
-          ) : filteredMembers.length === 0 ? (
+          ) : membersWithHours.length === 0 ? (
             <p className="text-gray-400">No engineers found</p>
           ) : (
-            filteredMembers.map((member) => (
+            membersWithHours.map((member) => (
               <div
                 key={member.id}
                 className="bg-gray-700 rounded p-4 flex justify-between items-center"
@@ -182,7 +127,8 @@ export default function Dashboard() {
                   <p className="text-sm text-gray-400">{member.identifier}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-sm text-gray-400">Hours: {member.totalHours?.toFixed(1) || '0'}</p>
+                  <p className="text-lg font-semibold text-white">{member.totalHours.toFixed(1)}h</p>
+                  <p className="text-xs text-gray-400">{getPeriodLabel()}</p>
                 </div>
               </div>
             ))
@@ -191,13 +137,13 @@ export default function Dashboard() {
       </div>
 
       {/* Time Entries Summary */}
-      <div className="bg-gray-800 rounded-lg p-6 mb-6">
-        <h3 className="text-xl font-semibold mb-4">Time Entries Summary</h3>
+      <div className="bg-gray-800 rounded-lg p-6">
+        <h3 className="text-xl font-semibold mb-4">Recent Time Entries</h3>
         <div className="space-y-2">
           {entriesLoading ? (
             <p className="text-gray-400">Loading time entries...</p>
           ) : filteredEntries.length === 0 ? (
-            <p className="text-gray-400">No time entries found</p>
+            <p className="text-gray-400">No time entries found for {getPeriodLabel().toLowerCase()}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full">
@@ -240,23 +186,15 @@ export default function Dashboard() {
                   ))}
                 </tbody>
               </table>
+              {filteredEntries.length > 10 && (
+                <p className="text-center text-gray-500 mt-4">
+                  Showing 10 of {filteredEntries.length} entries
+                </p>
+              )}
             </div>
           )}
         </div>
       </div>
-
-      {/* Placeholder for Trends Visualization */}
-      <div className="bg-gray-800 rounded-lg p-6 mb-6">
-        <h3 className="text-xl font-semibold mb-4">Trends (Coming Soon)</h3>
-        <p className="text-gray-400">Trends visualization will be displayed here</p>
-      </div>
-
-      {/* Placeholder for Comparison View */}
-      <div className="bg-gray-800 rounded-lg p-6">
-        <h3 className="text-xl font-semibold mb-4">Engineer Comparison (Coming Soon)</h3>
-        <p className="text-gray-400">Select engineers above to compare their performance</p>
-      </div>
     </div>
   )
 }
-

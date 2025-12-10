@@ -260,7 +260,7 @@ class ConnectWiseClient {
   }
 
   /**
-   * Fetch tickets - ID, summary, board (MS/PS), status, dates for resolution time
+   * Fetch tickets - ID, summary, board (MS/PS), status, dates, type, priority, owner for resolution time
    */
   async getTickets(
     boardIds?: number[],
@@ -292,7 +292,8 @@ class ConnectWiseClient {
       ...options,
       conditions: conditions || undefined,
       orderBy: 'dateEntered desc',
-      fields: options.fields || 'id,summary,board/id,status/name,closedDate,closedFlag,dateEntered,resolvedDate',
+      // Include additional fields for project analysis: type, priority, owner, company
+      fields: options.fields || 'id,summary,board/id,status/name,closedDate,closedFlag,dateEntered,resolvedDate,type/name,priority/name,owner/identifier,company/name,estimatedHours,actualHours',
     })
   }
 

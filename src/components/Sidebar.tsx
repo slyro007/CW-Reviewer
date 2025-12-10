@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import EngineerSelector from './EngineerSelector'
+import TimePeriodSelector from './TimePeriodSelector'
 
 export default function Sidebar() {
   // Start open on desktop, closed on mobile
@@ -104,6 +105,11 @@ export default function Sidebar() {
           {/* Engineer Selector */}
           <div className="p-4 border-b border-purple-800">
             <EngineerSelector />
+          </div>
+
+          {/* Time Period Selector */}
+          <div className="p-4 border-b border-purple-800">
+            <TimePeriodSelector />
           </div>
 
           {/* Navigation */}

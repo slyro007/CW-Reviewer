@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { Member } from '@/types'
 import { api } from '@/lib/api'
 
-// Only these 6 engineers should appear in the app
+// Only these 7 engineers should appear in the app
 const ALLOWED_MEMBER_IDENTIFIERS = [
   'BWolff',    // Bryan Wolff
   'KMoreno',   // Kevin Moreno
@@ -10,6 +10,7 @@ const ALLOWED_MEMBER_IDENTIFIERS = [
   'PCounts',   // Philip Counts
   'EHammond',  // Ezekiel Hammond
   'DCooper',   // Daniel Cooper
+  'dsolomon',  // Daniel Solomon
 ]
 
 interface MembersState {
