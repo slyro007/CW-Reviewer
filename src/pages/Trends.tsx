@@ -16,9 +16,9 @@ import {
   AreaChart,
   Area,
 } from 'recharts'
-import { format, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval, subDays, subMonths } from 'date-fns'
+import { format, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval, subDays, subMonths, subYears } from 'date-fns'
 
-type TimeRange = '7d' | '30d' | '90d' | '6m' | '1y'
+type TimeRange = '7d' | '30d' | '90d' | '6m' | '1y' | '3y'
 type Granularity = 'day' | 'week' | 'month'
 
 export default function Trends() {
@@ -26,18 +26,18 @@ export default function Trends() {
   const { members } = useMembersStore()
   const { entries, fetchTimeEntries } = useTimeEntriesStore()
 
-  // Auto-fetch time entries if not loaded
+  // Auto-fetch time entries if not loaded (3 years for full trends)
   useEffect(() => {
     if (entries.length === 0) {
       const end = new Date()
-      const start = subDays(end, 90) // Fetch 90 days for trends
+      const start = subYears(end, 3)
       fetchTimeEntries({
         startDate: format(start, 'yyyy-MM-dd'),
         endDate: format(end, 'yyyy-MM-dd'),
       })
     }
   }, []) // Only on mount
-  const [timeRange, setTimeRange] = useState<TimeRange>('30d')
+  const [timeRange, setTimeRange] = useState<TimeRange>('3y') // Default to all time (3 years)
   const [granularity, setGranularity] = useState<Granularity>('day')
 
   const selectedEngineer = selectedEngineerId 
@@ -55,7 +55,8 @@ export default function Trends() {
       case '90d': start = subDays(end, 90); break
       case '6m': start = subMonths(end, 6); break
       case '1y': start = subMonths(end, 12); break
-      default: start = subDays(end, 30)
+      case '3y': start = subYears(end, 3); break
+      default: start = subYears(end, 3) // Default to all time
     }
     
     return { start, end }
@@ -195,7 +196,7 @@ export default function Trends() {
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-1">Time Range</label>
             <div className="flex gap-2">
-              {(['7d', '30d', '90d', '6m', '1y'] as TimeRange[]).map(range => (
+              {(['7d', '30d', '90d', '6m', '1y', '3y'] as TimeRange[]).map(range => (
                 <button
                   key={range}
                   onClick={() => setTimeRange(range)}

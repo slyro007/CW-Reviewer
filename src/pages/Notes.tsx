@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
 import { useMembersStore } from '@/stores/membersStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
-import { format, subDays } from 'date-fns'
+import { format, subYears } from 'date-fns'
 
 export default function Notes() {
   const { selectedEngineerId } = useSelectedEngineerStore()
@@ -13,11 +13,11 @@ export default function Notes() {
     ? members.find(m => m.id === selectedEngineerId)
     : null
 
-  // Auto-fetch time entries if not loaded (only once)
+  // Auto-fetch time entries if not loaded (3 years for full history)
   useEffect(() => {
     if (entries.length === 0) {
       const end = new Date()
-      const start = subDays(end, 30)
+      const start = subYears(end, 3)
       fetchTimeEntries({
         startDate: format(start, 'yyyy-MM-dd'),
         endDate: format(end, 'yyyy-MM-dd'),

@@ -3,13 +3,13 @@ import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
 import { useMembersStore } from '@/stores/membersStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
 import { useTicketsStore } from '@/stores/ticketsStore'
-import { format, subDays } from 'date-fns'
+import { format, subYears } from 'date-fns'
 
 export default function Projects() {
   const { selectedEngineerId } = useSelectedEngineerStore()
   const { members } = useMembersStore()
   const { entries, fetchTimeEntries } = useTimeEntriesStore()
-  const { tickets, boards, isLoading, fetchTickets, fetchBoards, getTicketStats } = useTicketsStore()
+  const { tickets, isLoading, fetchProjectBoardTickets, getTicketStats } = useTicketsStore()
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'closed'>('all')
   const [searchQuery, setSearchQuery] = useState('')
 
@@ -18,13 +18,13 @@ export default function Projects() {
     : null
 
   useEffect(() => {
-    fetchTickets()
-    fetchBoards()
+    // Fetch only Project Board tickets
+    fetchProjectBoardTickets()
     
-    // Fetch time entries if not already loaded (default last 90 days for project context)
+    // Fetch time entries if not already loaded (default last 3 years for project context)
     if (entries.length === 0) {
       const end = new Date()
-      const start = subDays(end, 90)
+      const start = subYears(end, 3)
       fetchTimeEntries({
         startDate: format(start, 'yyyy-MM-dd'),
         endDate: format(end, 'yyyy-MM-dd'),
@@ -87,12 +87,6 @@ export default function Projects() {
     return hours
   }, [entries, selectedEngineerId])
 
-  // Get board name by ID
-  const getBoardName = (boardId: number) => {
-    const board = boards.find(b => b.id === boardId)
-    return board?.name || `Board ${boardId}`
-  }
-
   // Format resolution time
   const formatResolutionTime = (hours?: number) => {
     if (!hours) return 'N/A'
@@ -134,21 +128,6 @@ export default function Projects() {
           </p>
         </div>
       </div>
-
-      {/* Board Distribution */}
-      {Object.keys(stats.byBoard).length > 0 && (
-        <div className="bg-gray-800 rounded-lg p-6 mb-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Tickets by Board</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {Object.entries(stats.byBoard).map(([boardId, count]) => (
-              <div key={boardId} className="bg-gray-700 rounded-lg p-4">
-                <p className="text-sm text-gray-400 truncate">{getBoardName(Number(boardId))}</p>
-                <p className="text-2xl font-bold text-white">{count}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Filters */}
       <div className="bg-gray-800 rounded-lg p-4 mb-6">
@@ -226,7 +205,7 @@ export default function Projects() {
                     </td>
                     <td className="py-3 px-4">
                       <span className="text-sm text-gray-400">
-                        {getBoardName(ticket.boardId)}
+                        Project Board
                       </span>
                     </td>
                     <td className="py-3 px-4">

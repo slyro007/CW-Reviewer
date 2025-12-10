@@ -31,11 +31,11 @@ export default function PerformanceReview() {
 
   useEffect(() => {
     fetchTickets()
-    // Fetch time entries if not loaded (90 days for review)
+    // Fetch time entries if not loaded (3 years for full review history)
     if (entries.length === 0) {
       const end = new Date()
       const start = new Date()
-      start.setDate(start.getDate() - 90)
+      start.setFullYear(start.getFullYear() - 3)
       fetchTimeEntries({
         startDate: start.toISOString().split('T')[0],
         endDate: end.toISOString().split('T')[0],

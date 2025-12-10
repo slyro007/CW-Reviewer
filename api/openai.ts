@@ -98,6 +98,16 @@ const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
       Provide insights on similarities, differences, and recommendations.`
     },
   },
+  engineerAnalysis: {
+    name: 'engineerAnalysis',
+    systemPrompt: `You are an expert MSP (Managed Service Provider) performance analyst. 
+    You provide insightful, actionable analysis of engineer time tracking data.
+    Be professional, constructive, and specific in your recommendations.
+    Format your response with clear sections and bullet points.`,
+    userPrompt: (data: { prompt: string; data: any }) => {
+      return data.prompt
+    },
+  },
 }
 
 class OpenAIClient {
@@ -117,7 +127,7 @@ class OpenAIClient {
       throw new Error(`Template ${templateName} not found`)
     }
 
-    const { model = 'gpt-4', temperature = 0.7 } = options
+    const { model = 'gpt-3.5-turbo', temperature = 0.7 } = options
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',

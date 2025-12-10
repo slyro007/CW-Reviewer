@@ -2,6 +2,16 @@ import { create } from 'zustand'
 import type { Member } from '@/types'
 import { api } from '@/lib/api'
 
+// Only these 6 engineers should appear in the app
+const ALLOWED_MEMBER_IDENTIFIERS = [
+  'BWolff',    // Bryan Wolff
+  'KMoreno',   // Kevin Moreno
+  'SCano',     // Shyanne Johnson-Cano
+  'PCounts',   // Philip Counts
+  'EHammond',  // Ezekiel Hammond
+  'DCooper',   // Daniel Cooper
+]
+
 interface MembersState {
   members: Member[]
   selectedMembers: number[] // For comparison feature
@@ -46,7 +56,7 @@ export const useMembersStore = create<MembersState>((set, get) => ({
       const data = await api.getMembers()
       
       // Transform API response to Member type
-      const members: Member[] = data.map((m: any) => ({
+      const allMembers: Member[] = data.map((m: any) => ({
         id: m.id,
         identifier: m.identifier || '',
         firstName: m.firstName || '',
@@ -55,25 +65,15 @@ export const useMembersStore = create<MembersState>((set, get) => ({
         inactiveFlag: m.inactiveFlag || false,
       }))
       
-      set({ members, isLoading: false })
-      
-      // Test: Check if "dsolomon" exists
-      const dsolomon = members.find(m => 
-        m.identifier?.toLowerCase().includes('dsolomon') ||
-        m.firstName?.toLowerCase().includes('dsolomon') ||
-        m.lastName?.toLowerCase().includes('dsolomon') ||
-        m.email?.toLowerCase().includes('dsolomon')
+      // Filter to only include the 6 allowed engineers
+      const members = allMembers.filter(m => 
+        ALLOWED_MEMBER_IDENTIFIERS.includes(m.identifier)
       )
       
-      if (dsolomon) {
-        console.log('✅ Found dsolomon:', dsolomon)
-      } else {
-        console.log('⚠️ dsolomon not found. Available members:', members.map(m => ({
-          identifier: m.identifier,
-          name: `${m.firstName} ${m.lastName}`,
-          email: m.email
-        })))
-      }
+      console.log(`✅ Fetched ${allMembers.length} total members, filtered to ${members.length} allowed engineers:`)
+      members.forEach(m => console.log(`   - ${m.firstName} ${m.lastName} (${m.identifier})`))
+      
+      set({ members, isLoading: false })
     } catch (error: any) {
       console.error('Error fetching members:', error)
       set({ error: error.message || 'Failed to fetch members', isLoading: false })

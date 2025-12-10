@@ -3,7 +3,7 @@ import { useMembersStore } from '@/stores/membersStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
 import { useUIStore } from '@/stores/uiStore'
 import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
-import { format, subDays } from 'date-fns'
+import { format, subYears } from 'date-fns'
 
 export default function Dashboard() {
   const { members, isLoading: membersLoading, fetchMembers } = useMembersStore()
@@ -11,10 +11,10 @@ export default function Dashboard() {
   const { setDateRange: setUIDateRange } = useUIStore()
   const { selectedEngineerId } = useSelectedEngineerStore()
   
-  // Default to last 30 days
+  // Default to last 3 years (all time)
   const [selectedDateRange, setSelectedDateRange] = useState<{ start: string; end: string }>(() => {
     const end = new Date()
-    const start = subDays(end, 30)
+    const start = subYears(end, 3)
     return {
       start: format(start, 'yyyy-MM-dd'),
       end: format(end, 'yyyy-MM-dd'),
