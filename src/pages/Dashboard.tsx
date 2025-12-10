@@ -14,10 +14,12 @@ export default function Dashboard() {
     end: '',
   })
 
+  const { fetchMembers } = useMembersStore()
+
   useEffect(() => {
-    // TODO: Fetch members and time entries from API
-    // This will be implemented when API integration is complete
-  }, [])
+    // Fetch members on mount
+    fetchMembers()
+  }, [fetchMembers])
 
   const handleDateRangeChange = () => {
     if (selectedDateRange.start && selectedDateRange.end) {
@@ -56,7 +58,7 @@ export default function Dashboard() {
   return (
     <div className="px-4 py-6 sm:px-0">
       <div className="mb-6">
-        <h2 className="text-3xl font-bold text-white mb-2">Dashboard</h2>
+        <h2 className="text-3xl font-bold text-white mb-2">Overview</h2>
         <p className="text-gray-400">
           {selectedEngineer 
             ? `Overview for ${selectedEngineer.firstName} ${selectedEngineer.lastName}`

@@ -15,8 +15,15 @@ export default function Sidebar() {
   const toggleSidebar = () => setIsOpen(!isOpen)
 
   const navItems = [
-    { path: '/', label: 'Dashboard', icon: '📊' },
-    { path: '/wrapped', label: 'CW Wrapped', icon: '🎁' },
+    { path: '/', label: 'Overview', icon: '📊' },
+    { path: '/time-tracking', label: 'Time Tracking', icon: '⏱️' },
+    { path: '/projects', label: 'Projects', icon: '📁' },
+    { path: '/notes', label: 'Notes', icon: '📝' },
+    { path: '/compare', label: 'Compare', icon: '👥' },
+    { path: '/trends', label: 'Trends', icon: '📈' },
+    { path: '/highlights', label: 'Highlights', icon: '⭐' },
+    { path: '/performance-review', label: 'Performance Review', icon: '📋' },
+    { path: '/export', label: 'Export', icon: '💾' },
   ]
 
   return (
@@ -24,7 +31,7 @@ export default function Sidebar() {
       {/* Burger Menu Button - Fixed top-left */}
       <button
         onClick={toggleSidebar}
-        className="fixed top-4 left-4 z-50 p-2 bg-gray-800 rounded-md text-white hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 lg:hidden"
+        className="fixed top-4 left-4 z-50 p-2 bg-purple-900 rounded-md text-white hover:bg-purple-800 focus:outline-none focus:ring-2 focus:ring-blue-500 lg:hidden"
         aria-label="Toggle sidebar"
       >
         <svg
@@ -62,7 +69,7 @@ export default function Sidebar() {
       {/* Sidebar */}
       <aside
         className={`
-          fixed top-0 left-0 h-full bg-gray-800 border-r border-gray-700 z-40
+          fixed top-0 left-0 h-full bg-purple-900 border-r border-purple-800 z-40
           transform transition-transform duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:translate-x-0
@@ -71,11 +78,11 @@ export default function Sidebar() {
       >
         <div className="flex flex-col h-full">
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-700">
-            <h1 className="text-xl font-bold text-white">CW Reviewer</h1>
+          <div className="flex items-center justify-between p-4 border-b border-purple-800">
+            <h1 className="text-xl font-bold text-blue-300">Navigation</h1>
             <button
               onClick={toggleSidebar}
-              className="lg:hidden p-1 text-gray-400 hover:text-white focus:outline-none"
+              className="lg:hidden p-1 text-blue-300 hover:text-white focus:outline-none"
               aria-label="Close sidebar"
             >
               <svg
@@ -95,7 +102,7 @@ export default function Sidebar() {
           </div>
 
           {/* Engineer Selector */}
-          <div className="p-4 border-b border-gray-700">
+          <div className="p-4 border-b border-purple-800">
             <EngineerSelector />
           </div>
 
@@ -118,8 +125,8 @@ export default function Sidebar() {
                         flex items-center px-4 py-3 rounded-lg transition-colors
                         ${
                           isActive
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                            ? 'bg-blue-500 text-white'
+                            : 'text-white hover:bg-purple-800 hover:text-blue-300'
                         }
                       `}
                     >
