@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import OpenAIClient from './openai'
+import OpenAIClient from './openai.js'
 
 export default async function handler(
   req: VercelRequest,

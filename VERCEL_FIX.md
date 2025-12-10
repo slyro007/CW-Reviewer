@@ -22,7 +22,17 @@ Add the `CW_CODEBASE` environment variable to your Vercel project:
 
 This bypasses the unreliable dynamic detection and uses the correct codebase directly.
 
-### 2. Code Changes
+### 2. Fixed ES Module Import Paths (CRITICAL)
+
+Updated all relative imports to include `.js` file extensions. This is required for ES modules in Vercel's Node.js serverless environment.
+
+**Changed:**
+- `import ConnectWiseClient from './connectwise'` → `import ConnectWiseClient from './connectwise.js'`
+- `import OpenAIClient from './openai'` → `import OpenAIClient from './openai.js'`
+
+**Files updated:** `members.ts`, `health.ts`, `boards.ts`, `tickets.ts`, `time-entries.ts`, `analyze.ts`
+
+### 3. Code Changes
 
 #### Updated `api/connectwise.ts`:
 - ✅ Checks for `CW_CODEBASE` environment variable first
@@ -60,8 +70,8 @@ This bypasses the unreliable dynamic detection and uses the correct codebase dir
 Commit and push the changes:
 
 ```bash
-git add api/connectwise.ts api/members.ts api/health.ts
-git commit -m "Fix: Add CW_CODEBASE support and improve error handling for Vercel"
+git add api/*.ts
+git commit -m "Fix: Add CW_CODEBASE support, fix ES module imports, and improve error handling"
 git push
 ```
 
