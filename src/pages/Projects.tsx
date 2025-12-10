@@ -3,11 +3,12 @@ import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
 import { useMembersStore } from '@/stores/membersStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
 import { useTicketsStore } from '@/stores/ticketsStore'
+import { format, subDays } from 'date-fns'
 
 export default function Projects() {
   const { selectedEngineerId } = useSelectedEngineerStore()
   const { members } = useMembersStore()
-  const { entries } = useTimeEntriesStore()
+  const { entries, fetchTimeEntries } = useTimeEntriesStore()
   const { tickets, boards, isLoading, fetchTickets, fetchBoards, getTicketStats } = useTicketsStore()
   const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'closed'>('all')
   const [searchQuery, setSearchQuery] = useState('')
@@ -19,7 +20,17 @@ export default function Projects() {
   useEffect(() => {
     fetchTickets()
     fetchBoards()
-  }, [fetchTickets, fetchBoards])
+    
+    // Fetch time entries if not already loaded (default last 90 days for project context)
+    if (entries.length === 0) {
+      const end = new Date()
+      const start = subDays(end, 90)
+      fetchTimeEntries({
+        startDate: format(start, 'yyyy-MM-dd'),
+        endDate: format(end, 'yyyy-MM-dd'),
+      })
+    }
+  }, [fetchTickets, fetchBoards, entries.length, fetchTimeEntries])
 
   // Get ticket IDs that the selected engineer worked on
   const engineerTicketIds = useMemo(() => {

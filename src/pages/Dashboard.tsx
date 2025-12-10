@@ -3,26 +3,51 @@ import { useMembersStore } from '@/stores/membersStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
 import { useUIStore } from '@/stores/uiStore'
 import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
+import { format, subDays } from 'date-fns'
 
 export default function Dashboard() {
-  const { members, isLoading: membersLoading } = useMembersStore()
-  const { entries, isLoading: entriesLoading, setDateRange } = useTimeEntriesStore()
+  const { members, isLoading: membersLoading, fetchMembers } = useMembersStore()
+  const { entries, isLoading: entriesLoading, setDateRange, fetchTimeEntries } = useTimeEntriesStore()
   const { setDateRange: setUIDateRange } = useUIStore()
   const { selectedEngineerId } = useSelectedEngineerStore()
-  const [selectedDateRange, setSelectedDateRange] = useState<{ start: string; end: string }>({
-    start: '',
-    end: '',
+  
+  // Default to last 30 days
+  const [selectedDateRange, setSelectedDateRange] = useState<{ start: string; end: string }>(() => {
+    const end = new Date()
+    const start = subDays(end, 30)
+    return {
+      start: format(start, 'yyyy-MM-dd'),
+      end: format(end, 'yyyy-MM-dd'),
+    }
   })
-
-  const { fetchMembers } = useMembersStore()
 
   useEffect(() => {
     // Fetch members on mount
     fetchMembers()
   }, [fetchMembers])
 
+  // Fetch time entries on mount and when date range changes
+  useEffect(() => {
+    if (selectedDateRange.start && selectedDateRange.end) {
+      fetchTimeEntries({
+        startDate: selectedDateRange.start,
+        endDate: selectedDateRange.end,
+      })
+      
+      const start = new Date(selectedDateRange.start)
+      const end = new Date(selectedDateRange.end)
+      setDateRange(start, end)
+      setUIDateRange(start, end)
+    }
+  }, []) // Only on mount - manual trigger for changes
+
   const handleDateRangeChange = () => {
     if (selectedDateRange.start && selectedDateRange.end) {
+      fetchTimeEntries({
+        startDate: selectedDateRange.start,
+        endDate: selectedDateRange.end,
+      })
+      
       const start = new Date(selectedDateRange.start)
       const end = new Date(selectedDateRange.end)
       setDateRange(start, end)

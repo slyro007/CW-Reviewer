@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { TimeEntry } from '@/types'
+import { api } from '@/lib/api'
 
 interface TimeEntriesState {
   entries: TimeEntry[]
@@ -16,6 +17,7 @@ interface TimeEntriesState {
   setError: (error: string | null) => void
   getEntriesByMember: (memberId: number) => TimeEntry[]
   getEntriesByDateRange: (start: Date, end: Date) => TimeEntry[]
+  fetchTimeEntries: (params?: { startDate?: string; endDate?: string; memberIds?: number[] }) => Promise<void>
 }
 
 export const useTimeEntriesStore = create<TimeEntriesState>((set, get) => ({
@@ -42,5 +44,32 @@ export const useTimeEntriesStore = create<TimeEntriesState>((set, get) => ({
       return entryDate >= start && entryDate <= end
     })
   },
+  fetchTimeEntries: async (params) => {
+    const { isLoading } = get()
+    if (isLoading) return
+    
+    set({ isLoading: true, error: null })
+    try {
+      console.log('[TimeEntries] Fetching time entries...', params)
+      const data = await api.getTimeEntries(params)
+      
+      const entries: TimeEntry[] = data.map((e: any) => ({
+        id: e.id,
+        memberId: e.member?.id || e.memberId,
+        ticketId: e.ticket?.id || e.ticketId,
+        hours: e.hours || e.actualHours || 0,
+        billableOption: e.billableOption,
+        notes: e.notes,
+        internalNotes: e.internalNotes,
+        dateStart: new Date(e.dateStart),
+        dateEnd: e.dateEnd ? new Date(e.dateEnd) : undefined,
+      }))
+      
+      set({ entries, isLoading: false })
+      console.log(`✅ Fetched ${entries.length} time entries`)
+    } catch (error: any) {
+      console.error('Error fetching time entries:', error)
+      set({ error: error.message || 'Failed to fetch time entries', isLoading: false })
+    }
+  },
 }))
-
