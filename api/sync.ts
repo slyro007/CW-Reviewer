@@ -125,7 +125,7 @@ export default async function handler(
         const syncMode = isIncrementalSync ? 'incremental' : 'full'
         
         console.log(`[Sync] Starting ${syncMode} sync for ${entityType}...`)
-        if (isIncrementalSync) {
+        if (isIncrementalSync && lastSyncAt) {
           console.log(`[Sync] Fetching records modified since ${lastSyncAt.toISOString()}`)
         }
 
