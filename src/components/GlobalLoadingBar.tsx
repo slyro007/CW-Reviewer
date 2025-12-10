@@ -11,24 +11,8 @@ export default function GlobalLoadingBar() {
     clearSyncError 
   } = useGlobalLoadingStore()
 
-  // Check sync status on mount and auto-sync if stale
-  useEffect(() => {
-    const initSync = async () => {
-      try {
-        const status = await checkSyncStatus()
-        
-        // If any entity is stale, trigger sync
-        if (status.isStale) {
-          console.log('[GlobalLoadingBar] Data is stale, starting sync...')
-          await performSync()
-        }
-      } catch (error) {
-        console.error('[GlobalLoadingBar] Failed to check/perform sync:', error)
-      }
-    }
-
-    initSync()
-  }, [])
+  // Note: Sync now runs during build process, not in UI
+  // This component only displays sync status if sync is manually triggered via API
 
   // Don't show if not syncing and no error
   if (!isSyncing && !syncError && !syncProgress) {

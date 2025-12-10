@@ -6,6 +6,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import prisma from './db.js'
+import { ALLOWED_ENGINEER_IDENTIFIERS } from './config.js'
 
 export default async function handler(
   req: VercelRequest,
@@ -37,6 +38,9 @@ export default async function handler(
         ? managerIds.split(',') 
         : managerIds as string[]
       where.managerIdentifier = { in: managers }
+    } else {
+      // Default to only allowed engineers if no specific managers requested
+      where.managerIdentifier = { in: ALLOWED_ENGINEER_IDENTIFIERS }
     }
 
     console.log('[API /projects] Fetching projects from database...')

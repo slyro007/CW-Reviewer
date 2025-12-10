@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "prisma generate && tsc && vite build",
+    "build": "prisma generate && tsx scripts/sync-during-build.ts && tsc && vite build",
+    "build:sync": "tsx scripts/sync-during-build.ts",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "db:generate": "prisma generate",
@@ -38,6 +39,7 @@
     "postcss": "^8.4.32",
     "prisma": "^5.7.1",
     "tailwindcss": "^3.3.6",
+    "tsx": "^4.7.0",
     "typescript": "^5.9.3",
     "vite": "^5.0.8"
   }
