@@ -1,5 +1,6 @@
 import { ReactNode } from 'react'
 import Sidebar from './Sidebar'
+import GlobalLoadingBar from './GlobalLoadingBar'
 
 interface LayoutProps {
   children: ReactNode
@@ -8,6 +9,7 @@ interface LayoutProps {
 export default function Layout({ children }: LayoutProps) {
   return (
     <div className="min-h-screen bg-gray-900 text-white">
+      <GlobalLoadingBar />
       <Sidebar />
       {/* Main content area with left margin for sidebar on desktop */}
       <main className="lg:ml-64 transition-all duration-300">

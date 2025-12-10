@@ -50,6 +50,17 @@ model Member {
   @@index([inactiveFlag])
 }
 
+// Service board tracking - which boards are for service desk vs projects
+model ServiceBoard {
+  id          Int      @id
+  boardId     Int      @unique
+  name        String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([boardId])
+}
+
 model Ticket {
   id              Int      @id
   summary         String?
@@ -59,6 +70,14 @@ model Ticket {
   closedFlag      Boolean  @default(false)
   dateEntered     DateTime?
   resolvedDate    DateTime?
+  // Extended fields for service desk
+  owner           String?   // Owner identifier
+  company         String?   // Company name
+  type            String?   // Ticket type
+  priority        String?   // Priority level
+  resources       String?   // Comma-separated resource identifiers
+  estimatedHours  Float?
+  actualHours     Float?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -69,12 +88,15 @@ model Ticket {
   @@index([closedFlag])
   @@index([dateEntered])
   @@index([resolvedDate])
+  @@index([owner])
+  @@index([company])
 }
 
 model TimeEntry {
   id              Int      @id
   memberId        Int
-  ticketId         Int?
+  ticketId        Int?
+  projectId       Int?     // Link to project if applicable
   hours           Float
   billableOption  String?  // "Billable", "DoNotBill", "NoCharge", etc.
   notes           String?
@@ -86,11 +108,88 @@ model TimeEntry {
 
   member          Member      @relation(fields: [memberId], references: [id])
   ticket          Ticket?     @relation(fields: [ticketId], references: [id])
+  project         Project?    @relation(fields: [projectId], references: [id])
 
   @@index([memberId])
   @@index([ticketId])
+  @@index([projectId])
   @@index([dateStart])
   @@index([billableOption])
+}
+
+model Project {
+  id                  Int       @id
+  name                String
+  status              String?   // "Open", "Closed", etc.
+  company             String?   // Company name
+  managerIdentifier   String?   // Manager identifier (e.g., "DSolomon")
+  managerName         String?   // Manager full name
+  boardName           String?
+  estimatedStart      DateTime?
+  estimatedEnd        DateTime?
+  actualStart         DateTime?
+  actualEnd           DateTime?
+  estimatedHours      Float?
+  actualHours         Float?
+  percentComplete     Float?
+  type                String?
+  closedFlag          Boolean   @default(false)
+  description         String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  timeEntries         TimeEntry[]
+  projectTickets      ProjectTicket[]
+
+  @@index([status])
+  @@index([managerIdentifier])
+  @@index([closedFlag])
+  @@index([company])
+}
+
+model ProjectTicket {
+  id              Int       @id
+  summary         String?
+  projectId       Int
+  projectName     String?
+  phaseId         Int?
+  phaseName       String?
+  boardId         Int?
+  boardName       String?
+  status          String?
+  company         String?
+  resources       String?   // Comma-separated resource identifiers
+  closedFlag      Boolean   @default(false)
+  priority        String?
+  type            String?
+  wbsCode         String?
+  budgetHours     Float?
+  actualHours     Float?
+  dateEntered     DateTime?
+  closedDate      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  project         Project   @relation(fields: [projectId], references: [id])
+
+  @@index([projectId])
+  @@index([status])
+  @@index([closedFlag])
+  @@index([dateEntered])
+}
+
+model SyncLog {
+  id            String   @id @default(cuid())
+  entityType    String   @unique // "members", "boards", "tickets", "timeEntries", "projects", "projectTickets"
+  lastSyncAt    DateTime
+  recordCount   Int      @default(0)
+  status        String   @default("success") // "success", "failed", "in_progress"
+  errorMessage  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([entityType])
+  @@index([lastSyncAt])
 }
 
 model AnalysisCache {

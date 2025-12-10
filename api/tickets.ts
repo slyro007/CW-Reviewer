@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import ConnectWiseClient from './connectwise.js'
+import prisma from './db.js'
 
 export default async function handler(
   req: VercelRequest,
@@ -21,46 +21,62 @@ export default async function handler(
   try {
     const { boardIds, startDate, endDate } = req.query
 
-    const client = new ConnectWiseClient({
-      clientId: process.env.CW_CLIENT_ID || process.env.VITE_CW_CLIENT_ID || '',
-      publicKey: process.env.CW_PUBLIC_KEY || process.env.VITE_CW_PUBLIC_KEY || '',
-      privateKey: process.env.CW_PRIVATE_KEY || '',
-      baseUrl: process.env.CW_BASE_URL || process.env.VITE_CW_BASE_URL || '',
-      companyId: process.env.CW_COMPANY_ID || process.env.VITE_CW_COMPANY_ID || '',
+    console.log('[API /tickets] Query params:', { boardIds, startDate, endDate })
+
+    // Build where clause
+    const where: any = {}
+
+    if (boardIds) {
+      const boardIdArray = (boardIds as string).split(',').map(Number)
+      where.boardId = { in: boardIdArray }
+    }
+
+    if (startDate || endDate) {
+      where.dateEntered = {}
+      if (startDate) {
+        where.dateEntered.gte = new Date(startDate as string)
+      }
+      if (endDate) {
+        where.dateEntered.lte = new Date(endDate as string)
+      }
+    }
+
+    console.log('[API /tickets] Fetching tickets from database...')
+    
+    const tickets = await prisma.ticket.findMany({
+      where,
+      include: {
+        board: true,
+      },
+      orderBy: {
+        dateEntered: 'desc',
+      },
     })
 
-    const boardIdArray = boardIds 
-      ? (boardIds as string).split(',').map(Number)
-      : undefined
-    const start = startDate ? new Date(startDate as string) : undefined
-    const end = endDate ? new Date(endDate as string) : undefined
-
-    const tickets = await client.getTickets(boardIdArray, start, end)
+    console.log(`[API /tickets] Returning ${tickets.length} tickets from database`)
     
-    // Transform to only include necessary fields
-    const transformed = tickets.map((t: any) => ({
+    // Transform to match expected format
+    const transformed = tickets.map(t => ({
       id: t.id,
       summary: t.summary,
-      boardId: t.board?.id,
-      status: t.status?.name,
-      closedDate: t.closedDate,
-      closedFlag: t.closedFlag || false,
-      dateEntered: t.dateEntered,
-      resolvedDate: t.resolvedDate || t.actualHours,
-      owner: t.owner?.identifier || undefined,
-      company: t.company?.name || undefined,
-      type: t.type?.name || undefined,
-      priority: t.priority?.name || undefined,
-      estimatedHours: t.estimatedHours || undefined,
-      actualHours: t.actualHours || undefined,
-      // Team members - can be an array or single object
-      teamMember: t.teamMember?.identifier || (Array.isArray(t.team) ? t.team.map((tm: any) => tm.identifier || tm.member?.identifier).filter(Boolean).join(',') : undefined) || undefined,
+      boardId: t.boardId,
+      status: t.status,
+      closedDate: t.closedDate?.toISOString(),
+      closedFlag: t.closedFlag,
+      dateEntered: t.dateEntered?.toISOString(),
+      resolvedDate: t.resolvedDate?.toISOString(),
+      owner: t.owner,
+      company: t.company,
+      type: t.type,
+      priority: t.priority,
+      estimatedHours: t.estimatedHours,
+      actualHours: t.actualHours,
+      teamMember: t.resources,
     }))
 
-    res.status(200).json(transformed)
+    return res.status(200).json(transformed)
   } catch (error: any) {
-    console.error('Error fetching tickets:', error)
-    res.status(500).json({ error: error.message || 'Failed to fetch tickets' })
+    console.error('[API /tickets] Error:', error)
+    return res.status(500).json({ error: error.message || 'Failed to fetch tickets' })
   }
 }
-

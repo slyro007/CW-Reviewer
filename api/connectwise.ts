@@ -272,12 +272,14 @@ class ConnectWiseClient {
   /**
    * Fetch time entries with date range filtering
    * Only fetches: date, hours, billable, notes, member, ticket reference
+   * @param modifiedSince - Only fetch records modified after this date (for incremental sync)
    */
   async getTimeEntries(
     startDate?: Date,
     endDate?: Date,
     memberIds?: number[],
-    options: RequestOptions = {}
+    options: RequestOptions = {},
+    modifiedSince?: Date
   ): Promise<any[]> {
     let conditions = ''
     
@@ -299,6 +301,15 @@ class ConnectWiseClient {
         : memberCondition
     }
 
+    // Incremental sync: only fetch records modified since last sync
+    if (modifiedSince) {
+      const modifiedCondition = `_info/lastUpdated > [${modifiedSince.toISOString()}]`
+      conditions = conditions 
+        ? `${conditions} AND ${modifiedCondition}`
+        : modifiedCondition
+      console.log(`[ConnectWise] Incremental sync: fetching time entries modified since ${modifiedSince.toISOString()}`)
+    }
+
     return this.requestAllPages<any[]>('/time/entries', {
       ...options,
       conditions: conditions || undefined,
@@ -309,12 +320,14 @@ class ConnectWiseClient {
 
   /**
    * Fetch tickets - ID, summary, board (MS/PS), status, dates, type, priority, owner for resolution time
+   * @param modifiedSince - Only fetch records modified after this date (for incremental sync)
    */
   async getTickets(
     boardIds?: number[],
     startDate?: Date,
     endDate?: Date,
-    options: RequestOptions = {}
+    options: RequestOptions = {},
+    modifiedSince?: Date
   ): Promise<any[]> {
     let conditions = ''
     
@@ -334,6 +347,15 @@ class ConnectWiseClient {
       conditions = conditions 
         ? `${conditions} AND ${dateCondition}`
         : dateCondition
+    }
+
+    // Incremental sync: only fetch records modified since last sync
+    if (modifiedSince) {
+      const modifiedCondition = `_info/lastUpdated > [${modifiedSince.toISOString()}]`
+      conditions = conditions 
+        ? `${conditions} AND ${modifiedCondition}`
+        : modifiedCondition
+      console.log(`[ConnectWise] Incremental sync: fetching tickets modified since ${modifiedSince.toISOString()}`)
     }
 
     return this.requestAllPages<any[]>('/service/tickets', {
@@ -362,10 +384,12 @@ class ConnectWiseClient {
   /**
    * Fetch projects from ConnectWise Projects API
    * Returns actual project management entities with status, manager, dates, etc.
+   * @param modifiedSince - Only fetch records modified after this date (for incremental sync)
    */
   async getProjects(
     managerIds?: string[], // Manager identifiers like 'DSolomon', 'EHammond'
-    options: RequestOptions = {}
+    options: RequestOptions = {},
+    modifiedSince?: Date
   ): Promise<any[]> {
     let conditions = ''
     
@@ -373,6 +397,15 @@ class ConnectWiseClient {
       // Filter by manager identifier
       const managerConditions = managerIds.map(id => `manager/identifier='${id}'`).join(' OR ')
       conditions = `(${managerConditions})`
+    }
+
+    // Incremental sync: only fetch records modified since last sync
+    if (modifiedSince) {
+      const modifiedCondition = `_info/lastUpdated > [${modifiedSince.toISOString()}]`
+      conditions = conditions 
+        ? `${conditions} AND ${modifiedCondition}`
+        : modifiedCondition
+      console.log(`[ConnectWise] Incremental sync: fetching projects modified since ${modifiedSince.toISOString()}`)
     }
 
     return this.requestAllPages<any[]>('/project/projects', {
@@ -397,15 +430,26 @@ class ConnectWiseClient {
   /**
    * Fetch project tickets - these are tickets that belong to projects
    * Different from service tickets - accessed via /project/tickets
+   * @param modifiedSince - Only fetch records modified after this date (for incremental sync)
    */
   async getProjectTickets(
     projectId?: number,
-    options: RequestOptions = {}
+    options: RequestOptions = {},
+    modifiedSince?: Date
   ): Promise<any[]> {
     let conditions = ''
     
     if (projectId) {
       conditions = `project/id=${projectId}`
+    }
+
+    // Incremental sync: only fetch records modified since last sync
+    if (modifiedSince) {
+      const modifiedCondition = `_info/lastUpdated > [${modifiedSince.toISOString()}]`
+      conditions = conditions 
+        ? `${conditions} AND ${modifiedCondition}`
+        : modifiedCondition
+      console.log(`[ConnectWise] Incremental sync: fetching project tickets modified since ${modifiedSince.toISOString()}`)
     }
 
     return this.requestAllPages<any[]>('/project/tickets', {

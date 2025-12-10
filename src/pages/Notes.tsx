@@ -1,263 +1,321 @@
-import { useEffect, useMemo } from 'react'
+import { useMemo, useEffect, useState } from 'react'
 import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
 import { useMembersStore } from '@/stores/membersStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
+import { useTicketsStore } from '@/stores/ticketsStore'
+import { useProjectsStore } from '@/stores/projectsStore'
 import { useTimePeriodStore } from '@/stores/timePeriodStore'
+import DataSourceFilter, { useDataSources } from '@/components/DataSourceFilter'
+import { analyzeNoteQuality } from '@/lib/noteQuality'
 import { format } from 'date-fns'
+
+interface NoteEntry {
+  id: number
+  date: string
+  hours: number
+  notes: string
+  billableOption: string
+  ticketId?: number
+  ticketSummary?: string
+  source: 'serviceDesk' | 'projects' | 'unknown'
+  qualityScore: number
+}
 
 export default function Notes() {
   const { selectedEngineerId } = useSelectedEngineerStore()
   const { members } = useMembersStore()
   const { entries, fetchTimeEntries } = useTimeEntriesStore()
+  const { serviceTickets, fetchServiceBoardTickets, serviceBoardIds } = useTicketsStore()
+  const { projectTickets, fetchProjects, fetchProjectTickets } = useProjectsStore()
   const { getDateRange, getPeriodLabel } = useTimePeriodStore()
+  
+  const { dataSources, setDataSources, includesServiceDesk, includesProjects } = useDataSources()
+  const [sortBy, setSortBy] = useState<'date' | 'quality' | 'hours'>('date')
+  const [filterQuality, setFilterQuality] = useState<'all' | 'good' | 'poor'>('all')
 
   const dateRange = getDateRange()
-  const periodLabel = getPeriodLabel()
+  const selectedEngineer = selectedEngineerId ? members.find(m => m.id === selectedEngineerId) : null
 
-  const selectedEngineer = selectedEngineerId 
-    ? members.find(m => m.id === selectedEngineerId)
-    : null
-
-  // Fetch time entries based on global date range
   useEffect(() => {
-    fetchTimeEntries({
-      startDate: format(dateRange.start, 'yyyy-MM-dd'),
-      endDate: format(dateRange.end, 'yyyy-MM-dd'),
-    })
+    fetchTimeEntries({ startDate: format(dateRange.start, 'yyyy-MM-dd'), endDate: format(dateRange.end, 'yyyy-MM-dd') })
+    fetchServiceBoardTickets()
+    fetchProjects()
+    fetchProjectTickets()
   }, [dateRange.start.getTime(), dateRange.end.getTime()])
 
-  // Filter entries based on selected engineer and date range
-  const filteredEntries = useMemo(() => {
+  // Build lookup maps
+  const serviceTicketMap = useMemo(() => new Map(serviceTickets.map(t => [t.id, t])), [serviceTickets])
+  const projectTicketMap = useMemo(() => new Map(projectTickets.map(t => [t.id, t])), [projectTickets])
+  const serviceBoardIdSet = useMemo(() => new Set(serviceBoardIds), [serviceBoardIds])
+  // Get project board IDs from the project tickets
+  const projectBoardIdSet = useMemo(() => new Set(projectTickets.filter(t => t.boardId).map(t => t.boardId!)), [projectTickets])
+
+  // Filter entries and enrich with ticket info
+  const enrichedEntries = useMemo((): NoteEntry[] => {
     let result = entries.filter(e => {
       const entryDate = new Date(e.dateStart)
       return entryDate >= dateRange.start && entryDate <= dateRange.end
     })
     
     if (selectedEngineerId !== null) {
-      result = result.filter(entry => entry.memberId === selectedEngineerId)
+      result = result.filter(e => e.memberId === selectedEngineerId)
     }
+
+    // Filter by data source
+    if (!includesServiceDesk && !includesProjects) return []
+    
+    return result.map(entry => {
+      const boardId = entry.boardId
+      const ticketId = entry.ticketId
+      let source: 'serviceDesk' | 'projects' | 'unknown' = 'unknown'
+      let ticketSummary: string | undefined
+      
+      // Determine source from board
+      if (boardId && serviceBoardIdSet.has(boardId)) {
+        source = 'serviceDesk'
+        if (ticketId) ticketSummary = serviceTicketMap.get(ticketId)?.summary
+      } else if (boardId && projectBoardIdSet.has(boardId)) {
+        source = 'projects'
+        if (ticketId) ticketSummary = projectTicketMap.get(ticketId)?.summary
+      } else if (ticketId) {
+        // Try to find ticket in either map
+        if (serviceTicketMap.has(ticketId)) {
+          source = 'serviceDesk'
+          ticketSummary = serviceTicketMap.get(ticketId)?.summary
+        } else if (projectTicketMap.has(ticketId)) {
+          source = 'projects'
+          ticketSummary = projectTicketMap.get(ticketId)?.summary
+        }
+      }
+
+      // Filter based on selected data source
+      if (source === 'serviceDesk' && !includesServiceDesk) return null
+      if (source === 'projects' && !includesProjects) return null
+      if (source === 'unknown' && !(includesServiceDesk || includesProjects)) return null
+
+      const qualityResult = analyzeNoteQuality(entry.notes)
+
+      return {
+        id: entry.id,
+        date: entry.dateStart,
+        hours: entry.hours,
+        notes: entry.notes || '',
+        billableOption: entry.billableOption || 'N/A',
+        ticketId,
+        ticketSummary,
+        source,
+        qualityScore: qualityResult.score,
+      }
+    }).filter(Boolean) as NoteEntry[]
+  }, [entries, selectedEngineerId, dateRange, includesServiceDesk, includesProjects, serviceBoardIdSet, projectBoardIdSet, serviceTicketMap, projectTicketMap])
+
+  // Apply filters and sorting
+  const displayEntries = useMemo(() => {
+    let result = [...enrichedEntries]
+    
+    // Quality filter
+    if (filterQuality === 'good') {
+      result = result.filter(e => e.qualityScore >= 60)
+    } else if (filterQuality === 'poor') {
+      result = result.filter(e => e.qualityScore < 60)
+    }
+
+    // Sorting
+    switch (sortBy) {
+      case 'date':
+        result.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        break
+      case 'quality':
+        result.sort((a, b) => b.qualityScore - a.qualityScore)
+        break
+      case 'hours':
+        result.sort((a, b) => b.hours - a.hours)
+        break
+    }
+
     return result
-  }, [entries, selectedEngineerId, dateRange])
+  }, [enrichedEntries, filterQuality, sortBy])
 
-  // Filter entries with notes
-  const entriesWithNotes = filteredEntries.filter(entry => entry.notes && entry.notes.trim().length > 0)
+  // Stats
+  const stats = useMemo(() => {
+    const withNotes = enrichedEntries.filter(e => e.notes && e.notes.trim().length > 0)
+    const avgQuality = withNotes.length > 0 
+      ? withNotes.reduce((sum, e) => sum + e.qualityScore, 0) / withNotes.length 
+      : 0
+    const serviceDeskCount = enrichedEntries.filter(e => e.source === 'serviceDesk').length
+    const projectsCount = enrichedEntries.filter(e => e.source === 'projects').length
+    const goodQuality = enrichedEntries.filter(e => e.qualityScore >= 60).length
+    const poorQuality = enrichedEntries.filter(e => e.qualityScore < 60 && e.notes).length
+    const noNotes = enrichedEntries.filter(e => !e.notes || e.notes.trim().length === 0).length
 
-  // Calculate quality metrics
-  const avgNoteLength = entriesWithNotes.length > 0
-    ? Math.round(entriesWithNotes.reduce((sum, e) => sum + (e.notes?.length || 0), 0) / entriesWithNotes.length)
-    : 0
+    return {
+      total: enrichedEntries.length,
+      withNotes: withNotes.length,
+      withoutNotes: noNotes,
+      notesPercent: enrichedEntries.length > 0 ? (withNotes.length / enrichedEntries.length) * 100 : 0,
+      avgQuality,
+      serviceDeskCount,
+      projectsCount,
+      goodQuality,
+      poorQuality,
+    }
+  }, [enrichedEntries])
 
-  const notesPercent = filteredEntries.length > 0 
-    ? (entriesWithNotes.length / filteredEntries.length) * 100 
-    : 0
+  const getQualityColor = (score: number) => {
+    if (score >= 80) return 'text-green-400 bg-green-500/20'
+    if (score >= 60) return 'text-blue-400 bg-blue-500/20'
+    if (score >= 40) return 'text-yellow-400 bg-yellow-500/20'
+    return 'text-red-400 bg-red-500/20'
+  }
 
-  // Calculate notes quality score (0-100)
-  const notesQualityScore = Math.min(100, Math.round(
-    (notesPercent >= 90 ? 50 : (notesPercent / 90) * 50) +
-    (avgNoteLength >= 50 ? 30 : (avgNoteLength / 50) * 30) +
-    (avgNoteLength >= 100 ? 20 : (avgNoteLength / 100) * 20)
-  ))
-
-  // Categorize notes by length
-  const shortNotes = entriesWithNotes.filter(e => (e.notes?.length || 0) < 30).length
-  const mediumNotes = entriesWithNotes.filter(e => {
-    const len = e.notes?.length || 0
-    return len >= 30 && len < 100
-  }).length
-  const longNotes = entriesWithNotes.filter(e => (e.notes?.length || 0) >= 100).length
-
-  // Calculate notes with details (contains action words, context)
-  const notesWithDetails = entriesWithNotes.filter(e => {
-    const note = (e.notes || '').toLowerCase()
-    return note.length >= 30 && (
-      note.includes('installed') || note.includes('configured') || note.includes('resolved') ||
-      note.includes('updated') || note.includes('created') || note.includes('fixed') ||
-      note.includes('troubleshoot') || note.includes('reviewed') || note.includes('tested') ||
-      note.includes('because') || note.includes('due to') || note.includes('issue')
-    )
-  }).length
-
-  const detailsPercent = entriesWithNotes.length > 0
-    ? (notesWithDetails / entriesWithNotes.length) * 100
-    : 0
+  const getSourceBadge = (source: 'serviceDesk' | 'projects' | 'unknown') => {
+    switch (source) {
+      case 'serviceDesk': return { label: 'Service Desk', class: 'bg-cyan-600/20 text-cyan-400' }
+      case 'projects': return { label: 'Project', class: 'bg-purple-600/20 text-purple-400' }
+      default: return { label: 'Other', class: 'bg-gray-600/20 text-gray-400' }
+    }
+  }
 
   return (
     <div className="px-4 py-6 sm:px-0">
-      <div className="mb-6">
-        <h2 className="text-3xl font-bold text-white mb-2">Notes</h2>
-        <p className="text-gray-400">
-          {selectedEngineer 
-            ? `Notes analysis for ${selectedEngineer.firstName} ${selectedEngineer.lastName}`
-            : 'Notes analysis for all engineers'}
-          {' • '}<span className="text-blue-400">{periodLabel}</span>
-        </p>
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-bold text-white mb-2">Notes Quality Analysis</h2>
+          <p className="text-gray-400">
+            {selectedEngineer ? `Analyzing notes for ${selectedEngineer.firstName} ${selectedEngineer.lastName}` : 'Notes quality analysis for all engineers'}
+            {' • '}<span className="text-blue-400">{getPeriodLabel()}</span>
+          </p>
+        </div>
+        <DataSourceFilter selected={dataSources} onChange={setDataSources} />
       </div>
 
-      {/* Quality Score */}
+      {/* Stats Summary */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
+        <div className="bg-gray-800 rounded-lg p-4">
+          <h3 className="text-xs font-medium text-gray-400 mb-1">Total Entries</h3>
+          <p className="text-2xl font-bold text-white">{stats.total}</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-4">
+          <h3 className="text-xs font-medium text-gray-400 mb-1">With Notes</h3>
+          <p className="text-2xl font-bold text-green-400">{stats.notesPercent.toFixed(0)}%</p>
+        </div>
+        <div className="bg-gray-800 rounded-lg p-4">
+          <h3 className="text-xs font-medium text-gray-400 mb-1">Avg Quality</h3>
+          <p className={`text-2xl font-bold ${stats.avgQuality >= 60 ? 'text-green-400' : stats.avgQuality >= 40 ? 'text-yellow-400' : 'text-red-400'}`}>
+            {stats.avgQuality.toFixed(0)}
+          </p>
+        </div>
+        {includesServiceDesk && (
+          <div className="bg-gray-800 rounded-lg p-4">
+            <h3 className="text-xs font-medium text-gray-400 mb-1">Service Desk</h3>
+            <p className="text-2xl font-bold text-cyan-400">{stats.serviceDeskCount}</p>
+          </div>
+        )}
+        {includesProjects && (
+          <div className="bg-gray-800 rounded-lg p-4">
+            <h3 className="text-xs font-medium text-gray-400 mb-1">Projects</h3>
+            <p className="text-2xl font-bold text-purple-400">{stats.projectsCount}</p>
+          </div>
+        )}
+        <div className="bg-gray-800 rounded-lg p-4">
+          <h3 className="text-xs font-medium text-gray-400 mb-1">Need Improvement</h3>
+          <p className="text-2xl font-bold text-orange-400">{stats.poorQuality + stats.withoutNotes}</p>
+        </div>
+      </div>
+
+      {/* Quality Distribution */}
       <div className="bg-gray-800 rounded-lg p-6 mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-white">Notes Quality Score</h3>
-          <div className={`text-4xl font-bold ${
-            notesQualityScore >= 80 ? 'text-green-400' :
-            notesQualityScore >= 65 ? 'text-blue-400' :
-            notesQualityScore >= 50 ? 'text-yellow-400' :
-            'text-orange-400'
-          }`}>
-            {notesQualityScore}/100
-          </div>
+        <h3 className="text-lg font-semibold text-white mb-4">Quality Distribution</h3>
+        <div className="flex items-center gap-2 h-8 rounded-lg overflow-hidden">
+          {stats.goodQuality > 0 && (
+            <div className="h-full bg-green-500" style={{ width: `${(stats.goodQuality / stats.total) * 100}%` }} title={`Good: ${stats.goodQuality}`} />
+          )}
+          {stats.poorQuality > 0 && (
+            <div className="h-full bg-yellow-500" style={{ width: `${(stats.poorQuality / stats.total) * 100}%` }} title={`Needs work: ${stats.poorQuality}`} />
+          )}
+          {stats.withoutNotes > 0 && (
+            <div className="h-full bg-red-500" style={{ width: `${(stats.withoutNotes / stats.total) * 100}%` }} title={`No notes: ${stats.withoutNotes}`} />
+          )}
         </div>
-        <div className="w-full bg-gray-700 rounded-full h-3">
-          <div 
-            className={`h-3 rounded-full transition-all ${
-              notesQualityScore >= 80 ? 'bg-green-500' :
-              notesQualityScore >= 65 ? 'bg-blue-500' :
-              notesQualityScore >= 50 ? 'bg-yellow-500' :
-              'bg-orange-500'
-            }`}
-            style={{ width: `${notesQualityScore}%` }}
-          />
-        </div>
-        <p className="text-sm text-gray-400 mt-2">
-          Based on notes coverage ({notesPercent.toFixed(1)}%), average length ({avgNoteLength} chars), and detail quality
-        </p>
-      </div>
-
-      {/* Key Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div className="bg-gray-800 rounded-lg p-6">
-          <h3 className="text-sm font-medium text-gray-400 mb-2">Notes Coverage</h3>
-          <p className="text-3xl font-bold text-white">{notesPercent.toFixed(1)}%</p>
-          <p className="text-sm text-gray-400 mt-2">
-            {entriesWithNotes.length} of {filteredEntries.length} entries
-          </p>
-          <div className="mt-3">
-            <div className={`text-xs px-2 py-1 rounded ${
-              notesPercent >= 90 ? 'bg-green-500/20 text-green-400' :
-              notesPercent >= 70 ? 'bg-blue-500/20 text-blue-400' :
-              notesPercent >= 50 ? 'bg-yellow-500/20 text-yellow-400' :
-              'bg-orange-500/20 text-orange-400'
-            }`}>
-              {notesPercent >= 90 ? 'Excellent' :
-               notesPercent >= 70 ? 'Good' :
-               notesPercent >= 50 ? 'Fair' :
-               'Needs Improvement'}
-            </div>
-          </div>
-        </div>
-        <div className="bg-gray-800 rounded-lg p-6">
-          <h3 className="text-sm font-medium text-gray-400 mb-2">Avg Note Length</h3>
-          <p className="text-3xl font-bold text-white">{avgNoteLength}</p>
-          <p className="text-sm text-gray-400 mt-2">characters</p>
-          <div className="mt-3">
-            <div className={`text-xs px-2 py-1 rounded ${
-              avgNoteLength >= 100 ? 'bg-green-500/20 text-green-400' :
-              avgNoteLength >= 50 ? 'bg-blue-500/20 text-blue-400' :
-              avgNoteLength >= 30 ? 'bg-yellow-500/20 text-yellow-400' :
-              'bg-orange-500/20 text-orange-400'
-            }`}>
-              {avgNoteLength >= 100 ? 'Excellent' :
-               avgNoteLength >= 50 ? 'Good' :
-               avgNoteLength >= 30 ? 'Fair' :
-               'Too Brief'}
-            </div>
-          </div>
-        </div>
-        <div className="bg-gray-800 rounded-lg p-6">
-          <h3 className="text-sm font-medium text-gray-400 mb-2">Notes with Details</h3>
-          <p className="text-3xl font-bold text-white">{detailsPercent.toFixed(0)}%</p>
-          <p className="text-sm text-gray-400 mt-2">
-            {notesWithDetails} of {entriesWithNotes.length} notes
-          </p>
-        </div>
-        <div className="bg-gray-800 rounded-lg p-6">
-          <h3 className="text-sm font-medium text-gray-400 mb-2">Without Notes</h3>
-          <p className="text-3xl font-bold text-orange-400">{filteredEntries.length - entriesWithNotes.length}</p>
-          <p className="text-sm text-gray-400 mt-2">
-            {filteredEntries.length > 0 
-              ? `${((filteredEntries.length - entriesWithNotes.length) / filteredEntries.length * 100).toFixed(1)}% of entries`
-              : 'No entries'}
-          </p>
+        <div className="flex flex-wrap gap-4 mt-3 text-sm">
+          <span className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-green-500"></span>Good ({stats.goodQuality})</span>
+          <span className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-yellow-500"></span>Needs Work ({stats.poorQuality})</span>
+          <span className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-red-500"></span>No Notes ({stats.withoutNotes})</span>
         </div>
       </div>
 
-      {/* Notes Length Distribution */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div className="bg-gray-800 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Notes Length Distribution</h3>
-          <div className="space-y-3">
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="text-gray-400">Short (&lt;30 chars)</span>
-                <span className="text-white font-medium">{shortNotes}</span>
-              </div>
-              <div className="w-full bg-gray-700 rounded-full h-2">
-                <div 
-                  className="bg-orange-500 h-2 rounded-full"
-                  style={{ width: `${entriesWithNotes.length > 0 ? (shortNotes / entriesWithNotes.length) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="text-gray-400">Medium (30-99 chars)</span>
-                <span className="text-white font-medium">{mediumNotes}</span>
-              </div>
-              <div className="w-full bg-gray-700 rounded-full h-2">
-                <div 
-                  className="bg-yellow-500 h-2 rounded-full"
-                  style={{ width: `${entriesWithNotes.length > 0 ? (mediumNotes / entriesWithNotes.length) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between text-sm mb-1">
-                <span className="text-gray-400">Detailed (≥100 chars)</span>
-                <span className="text-white font-medium">{longNotes}</span>
-              </div>
-              <div className="w-full bg-gray-700 rounded-full h-2">
-                <div 
-                  className="bg-green-500 h-2 rounded-full"
-                  style={{ width: `${entriesWithNotes.length > 0 ? (longNotes / entriesWithNotes.length) * 100 : 0}%` }}
-                />
-              </div>
-            </div>
-          </div>
+      {/* Filters */}
+      <div className="bg-gray-800 rounded-lg p-4 mb-6 flex flex-wrap gap-4 items-center">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-400">Sort by:</span>
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}
+            className="bg-gray-700 text-white px-3 py-1.5 rounded-lg text-sm border border-gray-600 focus:border-blue-500 focus:outline-none">
+            <option value="date">Date</option>
+            <option value="quality">Quality Score</option>
+            <option value="hours">Hours</option>
+          </select>
         </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-400">Quality:</span>
+          <select value={filterQuality} onChange={(e) => setFilterQuality(e.target.value as any)}
+            className="bg-gray-700 text-white px-3 py-1.5 rounded-lg text-sm border border-gray-600 focus:border-blue-500 focus:outline-none">
+            <option value="all">All</option>
+            <option value="good">Good (60+)</option>
+            <option value="poor">Needs Improvement (&lt;60)</option>
+          </select>
+        </div>
+        <span className="text-sm text-gray-400 ml-auto">Showing {displayEntries.length} of {enrichedEntries.length}</span>
+      </div>
 
-        {/* Recommendations */}
-        <div className="bg-gray-800 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Recommendations</h3>
-          <div className="space-y-2">
-            {notesPercent < 80 && (
-              <div className="bg-orange-500/10 border border-orange-500/30 rounded p-3">
-                <p className="text-sm text-orange-400">
-                  Only {notesPercent.toFixed(0)}% of entries have notes. Aim for 90%+ coverage.
-                </p>
-              </div>
-            )}
-            {avgNoteLength < 50 && (
-              <div className="bg-yellow-500/10 border border-yellow-500/30 rounded p-3">
-                <p className="text-sm text-yellow-400">
-                  Average note length is {avgNoteLength} characters. Include more detail: what was done, why, and any blockers.
-                </p>
-              </div>
-            )}
-            {notesPercent >= 90 && avgNoteLength >= 100 && (
-              <div className="bg-green-500/10 border border-green-500/30 rounded p-3">
-                <p className="text-sm text-green-400">
-                  Excellent notes quality! Maintain this standard.
-                </p>
-              </div>
-            )}
-            {filteredEntries.length === 0 && (
-              <div className="bg-gray-700/50 rounded p-3">
-                <p className="text-sm text-gray-400">
-                  No time entries found for this period.
-                </p>
-              </div>
-            )}
-          </div>
+      {/* Entries List */}
+      <div className="bg-gray-800 rounded-lg overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="min-w-full">
+            <thead className="bg-gray-700">
+              <tr>
+                <th className="text-left py-3 px-4 text-gray-300 text-sm font-medium">Date</th>
+                <th className="text-left py-3 px-4 text-gray-300 text-sm font-medium">Source</th>
+                <th className="text-left py-3 px-4 text-gray-300 text-sm font-medium">Hours</th>
+                <th className="text-left py-3 px-4 text-gray-300 text-sm font-medium">Quality</th>
+                <th className="text-left py-3 px-4 text-gray-300 text-sm font-medium">Notes</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-700">
+              {displayEntries.length === 0 ? (
+                <tr><td colSpan={5} className="py-8 text-center text-gray-400">No entries found</td></tr>
+              ) : (
+                displayEntries.slice(0, 50).map((entry) => {
+                  const sourceBadge = getSourceBadge(entry.source)
+                  return (
+                    <tr key={entry.id} className="hover:bg-gray-700/50">
+                      <td className="py-3 px-4 text-sm text-gray-300">{format(new Date(entry.date), 'MMM d, yyyy')}</td>
+                      <td className="py-3 px-4">
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${sourceBadge.class}`}>{sourceBadge.label}</span>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-white font-medium">{entry.hours}h</td>
+                      <td className="py-3 px-4">
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${getQualityColor(entry.qualityScore)}`}>
+                          {entry.qualityScore}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-sm text-gray-300 max-w-md">
+                        {entry.ticketSummary && (
+                          <div className="text-xs text-gray-500 mb-1">Ticket: {entry.ticketSummary.substring(0, 50)}...</div>
+                        )}
+                        <div className="truncate">{entry.notes || <span className="text-red-400 italic">No notes</span>}</div>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
         </div>
+        {displayEntries.length > 50 && (
+          <div className="p-4 text-center text-gray-400 text-sm border-t border-gray-700">
+            Showing 50 of {displayEntries.length} entries
+          </div>
+        )}
       </div>
     </div>
   )

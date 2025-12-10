@@ -3,7 +3,9 @@ import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
 import { useMembersStore } from '@/stores/membersStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
 import { useTicketsStore } from '@/stores/ticketsStore'
+import { useProjectsStore } from '@/stores/projectsStore'
 import { useTimePeriodStore } from '@/stores/timePeriodStore'
+import DataSourceFilter, { useDataSources } from '@/components/DataSourceFilter'
 import { api } from '@/lib/api'
 import { format } from 'date-fns'
 
@@ -12,303 +14,233 @@ interface Achievement {
   description: string
   value: string | number
   color: string
+  source: 'time' | 'serviceDesk' | 'projects'
 }
 
 export default function Highlights() {
   const { selectedEngineerId } = useSelectedEngineerStore()
   const { members } = useMembersStore()
   const { entries, fetchTimeEntries } = useTimeEntriesStore()
-  const { tickets, fetchTickets } = useTicketsStore()
+  const { serviceTickets, fetchServiceBoardTickets } = useTicketsStore()
+  const { projects, projectTickets, fetchProjects, fetchProjectTickets } = useProjectsStore()
   const { getDateRange, getPeriodLabel } = useTimePeriodStore()
+  
+  const { dataSources, setDataSources, includesServiceDesk, includesProjects } = useDataSources()
   const [isGeneratingHighlights, setIsGeneratingHighlights] = useState(false)
   const [aiHighlights, setAiHighlights] = useState<string | null>(null)
   const [highlightError, setHighlightError] = useState<string | null>(null)
 
   const dateRange = getDateRange()
   const periodLabel = getPeriodLabel()
-
-  const selectedEngineer = selectedEngineerId 
-    ? members.find(m => m.id === selectedEngineerId)
-    : null
+  const selectedEngineer = selectedEngineerId ? members.find(m => m.id === selectedEngineerId) : null
 
   useEffect(() => {
-    fetchTickets()
-    fetchTimeEntries({
-      startDate: format(dateRange.start, 'yyyy-MM-dd'),
-      endDate: format(dateRange.end, 'yyyy-MM-dd'),
-    })
+    fetchTimeEntries({ startDate: format(dateRange.start, 'yyyy-MM-dd'), endDate: format(dateRange.end, 'yyyy-MM-dd') })
+    fetchServiceBoardTickets()
+    fetchProjects()
+    fetchProjectTickets()
   }, [dateRange.start.getTime(), dateRange.end.getTime()])
 
-  // Filter entries based on selected engineer and date range
+  // Filter entries
   const filteredEntries = useMemo(() => {
     let result = entries.filter(e => {
       const entryDate = new Date(e.dateStart)
       return entryDate >= dateRange.start && entryDate <= dateRange.end
     })
-    
-    if (selectedEngineerId !== null) {
-      result = result.filter(e => e.memberId === selectedEngineerId)
-    }
+    if (selectedEngineerId !== null) result = result.filter(e => e.memberId === selectedEngineerId)
     return result
   }, [entries, selectedEngineerId, dateRange])
 
-  // Calculate achievements/highlights
-  const achievements = useMemo((): Achievement[] => {
-    const totalHours = filteredEntries.reduce((sum, e) => sum + e.hours, 0)
-    const billableHours = filteredEntries
-      .filter(e => e.billableOption === 'Billable')
-      .reduce((sum, e) => sum + e.hours, 0)
-    const billablePercent = totalHours > 0 ? (billableHours / totalHours) * 100 : 0
-    
-    const withNotes = filteredEntries.filter(e => e.notes && e.notes.trim().length > 0)
-    const notesPercent = filteredEntries.length > 0 
-      ? (withNotes.length / filteredEntries.length) * 100 
-      : 0
-    
-    const uniqueTicketIds = new Set(filteredEntries.filter(e => e.ticketId).map(e => e.ticketId))
-    const ticketCount = uniqueTicketIds.size
-    
-    const workedTickets = tickets.filter(t => uniqueTicketIds.has(t.id))
-    const closedTickets = workedTickets.filter(t => t.closedFlag)
-    
-    const longestNote = withNotes.reduce((longest, e) => {
-      return (e.notes?.length || 0) > (longest?.notes?.length || 0) ? e : longest
-    }, withNotes[0])
-    
-    const hoursByDate: Record<string, number> = {}
-    filteredEntries.forEach(e => {
-      const date = new Date(e.dateStart).toLocaleDateString()
-      hoursByDate[date] = (hoursByDate[date] || 0) + e.hours
+  // Filter service tickets
+  const filteredServiceTickets = useMemo(() => {
+    if (!includesServiceDesk) return []
+    let result = serviceTickets.filter(t => {
+      if (!t.dateEntered) return true
+      const entered = new Date(t.dateEntered)
+      return entered >= dateRange.start && entered <= dateRange.end
     })
-    const busiestDay = Object.entries(hoursByDate).reduce(
-      (max, [date, hours]) => hours > max.hours ? { date, hours } : max,
-      { date: '', hours: 0 }
-    )
-    
-    const sortedDates = [...new Set(filteredEntries.map(e => 
-      new Date(e.dateStart).toDateString()
-    ))].sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
-    
-    let maxStreak = 0
-    let currentStreak = 1
-    for (let i = 1; i < sortedDates.length; i++) {
-      const prevDate = new Date(sortedDates[i - 1])
-      const currDate = new Date(sortedDates[i])
-      const diffDays = (currDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24)
-      if (diffDays === 1) {
-        currentStreak++
-        maxStreak = Math.max(maxStreak, currentStreak)
-      } else {
-        currentStreak = 1
-      }
+    if (selectedEngineer) {
+      const ticketIds = new Set<number>()
+      filteredEntries.filter(e => e.ticketId).forEach(e => { if (e.ticketId) ticketIds.add(e.ticketId) })
+      result.filter(t => t.owner?.toLowerCase() === selectedEngineer.identifier.toLowerCase() ||
+        t.resources?.toLowerCase().includes(selectedEngineer.identifier.toLowerCase())
+      ).forEach(t => ticketIds.add(t.id))
+      result = result.filter(t => ticketIds.has(t.id))
     }
-    maxStreak = Math.max(maxStreak, currentStreak)
+    return result
+  }, [serviceTickets, selectedEngineer, filteredEntries, dateRange, includesServiceDesk])
 
+  // Filter projects
+  const filteredProjects = useMemo(() => {
+    if (!includesProjects) return []
+    if (selectedEngineer) return projects.filter(p => p.managerIdentifier?.toLowerCase() === selectedEngineer.identifier.toLowerCase())
+    return projects
+  }, [projects, selectedEngineer, includesProjects])
+
+  const filteredProjectTickets = useMemo(() => {
+    if (!includesProjects) return []
+    const projectIds = filteredProjects.map(p => p.id)
+    return projectTickets.filter(t => projectIds.includes(t.projectId))
+  }, [projectTickets, filteredProjects, includesProjects])
+
+  // Calculate achievements
+  const achievements = useMemo((): Achievement[] => {
     const achievements: Achievement[] = []
+    
+    // Time entry achievements
+    const totalHours = filteredEntries.reduce((sum, e) => sum + e.hours, 0)
+    const billableHours = filteredEntries.filter(e => e.billableOption === 'Billable').reduce((sum, e) => sum + e.hours, 0)
+    const billablePercent = totalHours > 0 ? (billableHours / totalHours) * 100 : 0
+    const withNotes = filteredEntries.filter(e => e.notes && e.notes.trim().length > 0)
+    const notesPercent = filteredEntries.length > 0 ? (withNotes.length / filteredEntries.length) * 100 : 0
 
     if (totalHours > 0) {
-      achievements.push({
-        title: 'Time Champion',
-        description: 'Total hours logged',
-        value: `${totalHours.toFixed(0)}h`,
-        color: 'from-blue-500 to-blue-600',
-      })
+      achievements.push({ title: 'Time Champion', description: 'Total hours logged', value: `${totalHours.toFixed(0)}h`, color: 'from-blue-500 to-blue-600', source: 'time' })
     }
-
     if (billablePercent >= 70) {
-      achievements.push({
-        title: 'Billable Excellence',
-        description: 'Outstanding billable ratio',
-        value: `${billablePercent.toFixed(0)}%`,
-        color: 'from-green-500 to-emerald-600',
-      })
-    } else if (billablePercent > 0) {
-      achievements.push({
-        title: 'Revenue Generator',
-        description: 'Billable work ratio',
-        value: `${billablePercent.toFixed(0)}%`,
-        color: 'from-green-400 to-green-500',
-      })
+      achievements.push({ title: 'Billable Excellence', description: 'Outstanding billable ratio', value: `${billablePercent.toFixed(0)}%`, color: 'from-green-500 to-emerald-600', source: 'time' })
     }
-
-    if (ticketCount > 0) {
-      achievements.push({
-        title: 'Ticket Master',
-        description: 'Unique tickets worked',
-        value: ticketCount,
-        color: 'from-blue-500 to-blue-600',
-      })
-    }
-
-    if (closedTickets.length > 0) {
-      achievements.push({
-        title: 'Problem Solver',
-        description: 'Tickets resolved',
-        value: closedTickets.length,
-        color: 'from-emerald-500 to-teal-600',
-      })
-    }
-
     if (notesPercent >= 80) {
-      achievements.push({
-        title: 'Documentation Hero',
-        description: 'Entries with notes',
-        value: `${notesPercent.toFixed(0)}%`,
-        color: 'from-blue-500 to-blue-600',
-      })
-    } else if (notesPercent >= 50) {
-      achievements.push({
-        title: 'Note Taker',
-        description: 'Entries with notes',
-        value: `${notesPercent.toFixed(0)}%`,
-        color: 'from-blue-400 to-blue-500',
-      })
+      achievements.push({ title: 'Documentation Hero', description: 'Entries with notes', value: `${notesPercent.toFixed(0)}%`, color: 'from-blue-500 to-blue-600', source: 'time' })
     }
 
-    if (busiestDay.hours > 0) {
-      achievements.push({
-        title: 'Power Day',
-        description: `Most productive day (${busiestDay.date})`,
-        value: `${busiestDay.hours.toFixed(1)}h`,
-        color: 'from-orange-500 to-red-500',
-      })
+    // Service desk achievements
+    if (includesServiceDesk) {
+      const closedServiceTickets = filteredServiceTickets.filter(t => t.closedFlag)
+      if (closedServiceTickets.length > 0) {
+        achievements.push({ title: 'Service Champion', description: 'Service tickets resolved', value: closedServiceTickets.length, color: 'from-cyan-500 to-teal-600', source: 'serviceDesk' })
+      }
+      if (filteredServiceTickets.length > 10) {
+        achievements.push({ title: 'Support Star', description: 'Service tickets handled', value: filteredServiceTickets.length, color: 'from-cyan-600 to-cyan-700', source: 'serviceDesk' })
+      }
     }
 
+    // Project achievements
+    if (includesProjects) {
+      if (filteredProjects.length > 0) {
+        achievements.push({ title: 'Project Leader', description: 'Projects managed', value: filteredProjects.length, color: 'from-purple-500 to-violet-600', source: 'projects' })
+      }
+      const closedProjectTickets = filteredProjectTickets.filter(t => t.closedFlag)
+      if (closedProjectTickets.length > 0) {
+        achievements.push({ title: 'Task Master', description: 'Project tasks completed', value: closedProjectTickets.length, color: 'from-purple-600 to-purple-700', source: 'projects' })
+      }
+    }
+
+    // Work streak
+    const sortedDates = [...new Set(filteredEntries.map(e => new Date(e.dateStart).toDateString()))].sort((a, b) => new Date(a).getTime() - new Date(b).getTime())
+    let maxStreak = 0, currentStreak = 1
+    for (let i = 1; i < sortedDates.length; i++) {
+      const diffDays = (new Date(sortedDates[i]).getTime() - new Date(sortedDates[i - 1]).getTime()) / (1000 * 60 * 60 * 24)
+      if (diffDays === 1) { currentStreak++; maxStreak = Math.max(maxStreak, currentStreak) }
+      else { currentStreak = 1 }
+    }
+    maxStreak = Math.max(maxStreak, currentStreak)
     if (maxStreak >= 5) {
-      achievements.push({
-        title: 'Consistency',
-        description: 'Longest work streak',
-        value: `${maxStreak} days`,
-        color: 'from-yellow-500 to-amber-500',
-      })
-    }
-
-    if (filteredEntries.length > 0) {
-      achievements.push({
-        title: 'Time Tracker',
-        description: 'Total time entries',
-        value: filteredEntries.length,
-        color: 'from-cyan-500 to-cyan-600',
-      })
-    }
-
-    if (longestNote && longestNote.notes && longestNote.notes.length > 200) {
-      achievements.push({
-        title: 'Detail Oriented',
-        description: 'Longest documentation',
-        value: `${longestNote.notes.length} chars`,
-        color: 'from-pink-500 to-rose-500',
-      })
+      achievements.push({ title: 'Consistency King', description: 'Longest work streak', value: `${maxStreak} days`, color: 'from-yellow-500 to-amber-500', source: 'time' })
     }
 
     return achievements
-  }, [filteredEntries, tickets])
+  }, [filteredEntries, filteredServiceTickets, filteredProjects, filteredProjectTickets, includesServiceDesk, includesProjects])
 
-  // Calculate fun stats
+  // Fun stats
   const funStats = useMemo(() => {
     const totalHours = filteredEntries.reduce((sum, e) => sum + e.hours, 0)
-    const coffees = Math.round(totalHours / 2)
-    const meetings = Math.round(totalHours / 8)
-    const keystrokes = Math.round(totalHours * 3000)
+    return {
+      totalHours,
+      coffees: Math.round(totalHours / 2),
+      serviceResolved: filteredServiceTickets.filter(t => t.closedFlag).length,
+      projectsActive: filteredProjects.filter(p => !p.closedFlag).length,
+    }
+  }, [filteredEntries, filteredServiceTickets, filteredProjects])
 
-    return { coffees, meetings, keystrokes, totalHours }
-  }, [filteredEntries])
-
-  // Generate AI highlights
   const generateAIHighlights = async () => {
     setIsGeneratingHighlights(true)
     setHighlightError(null)
-    
     try {
-      const stats = {
-        period: periodLabel,
-        totalHours: filteredEntries.reduce((sum, e) => sum + e.hours, 0),
-        billableHours: filteredEntries.filter(e => e.billableOption === 'Billable')
-          .reduce((sum, e) => sum + e.hours, 0),
-        entryCount: filteredEntries.length,
-        ticketCount: new Set(filteredEntries.filter(e => e.ticketId).map(e => e.ticketId)).size,
-        notesCount: filteredEntries.filter(e => e.notes && e.notes.trim().length > 0).length,
-        achievements: achievements.map(a => `${a.title}: ${a.value}`),
-      }
-
-      const member = selectedEngineer || { firstName: 'Team', lastName: '' }
-      
       const response = await api.generateAnalysis('cwWrapped', {
-        member,
-        stats,
+        member: selectedEngineer || { firstName: 'Team', lastName: '' },
+        stats: { ...funStats, achievements: achievements.map(a => `${a.title}: ${a.value}`), dataSources },
         year: new Date().getFullYear(),
       })
-      
       setAiHighlights(response.analysis)
     } catch (error: any) {
-      console.error('Error generating highlights:', error)
       setHighlightError(error.message || 'Failed to generate highlights')
     } finally {
       setIsGeneratingHighlights(false)
     }
   }
 
+  // Filter achievements by data source
+  const filteredAchievements = achievements.filter(a => {
+    if (a.source === 'time') return true
+    if (a.source === 'serviceDesk') return includesServiceDesk
+    if (a.source === 'projects') return includesProjects
+    return true
+  })
+
   return (
     <div className="px-4 py-6 sm:px-0">
-      <div className="mb-6">
-        <h2 className="text-3xl font-bold text-white mb-2">
-          Highlights & Achievements
-        </h2>
-        <p className="text-gray-400">
-          {selectedEngineer 
-            ? `Celebrating ${selectedEngineer.firstName} ${selectedEngineer.lastName}'s accomplishments`
-            : 'Celebrating team accomplishments'}
-          {' • '}<span className="text-blue-400">{periodLabel}</span>
-        </p>
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-bold text-white mb-2">Highlights & Achievements</h2>
+          <p className="text-gray-400">
+            {selectedEngineer ? `Celebrating ${selectedEngineer.firstName} ${selectedEngineer.lastName}'s accomplishments` : 'Celebrating team accomplishments'}
+            {' • '}<span className="text-blue-400">{periodLabel}</span>
+          </p>
+        </div>
+        <DataSourceFilter selected={dataSources} onChange={setDataSources} />
       </div>
 
       {/* Fun Stats Banner */}
       <div className="bg-gradient-to-r from-gray-800 via-gray-800 to-gray-800 rounded-xl p-6 mb-6 border border-gray-700">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Ccircle%20cx%3D%221%22%20cy%3D%221%22%20r%3D%221%22%20fill%3D%22rgba(255%2C255%2C255%2C0.1)%22%2F%3E%3C%2Fsvg%3E')] opacity-30"></div>
-        <div className="relative z-10">
-          <h3 className="text-2xl font-bold text-white mb-4">Your {periodLabel} in Numbers</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <p className="text-4xl font-bold text-white">{funStats.totalHours.toFixed(0)}</p>
-              <p className="text-gray-300">Hours Logged</p>
-            </div>
-            <div className="text-center">
-              <p className="text-4xl font-bold text-white">{funStats.coffees}</p>
-              <p className="text-gray-300">Days of Work</p>
-            </div>
-            <div className="text-center">
-              <p className="text-4xl font-bold text-white">{funStats.meetings}</p>
-              <p className="text-gray-300">Work Sessions</p>
-            </div>
-            <div className="text-center">
-              <p className="text-4xl font-bold text-white">{(funStats.keystrokes / 1000).toFixed(0)}k</p>
-              <p className="text-gray-300">Est. Keystrokes</p>
-            </div>
+        <h3 className="text-2xl font-bold text-white mb-4">Your {periodLabel} in Numbers</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="text-center">
+            <p className="text-4xl font-bold text-white">{funStats.totalHours.toFixed(0)}</p>
+            <p className="text-gray-300">Hours Logged</p>
           </div>
+          <div className="text-center">
+            <p className="text-4xl font-bold text-white">{funStats.coffees}</p>
+            <p className="text-gray-300">Days of Work</p>
+          </div>
+          {includesServiceDesk && (
+            <div className="text-center">
+              <p className="text-4xl font-bold text-cyan-400">{funStats.serviceResolved}</p>
+              <p className="text-gray-300">Tickets Resolved</p>
+            </div>
+          )}
+          {includesProjects && (
+            <div className="text-center">
+              <p className="text-4xl font-bold text-purple-400">{funStats.projectsActive}</p>
+              <p className="text-gray-300">Active Projects</p>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Achievements Grid */}
-      {achievements.length > 0 ? (
+      {filteredAchievements.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          {achievements.map((achievement, index) => (
-            <div 
-              key={index}
-              className={`bg-gradient-to-br ${achievement.color} rounded-xl p-6 transform hover:scale-105 transition-transform duration-200 shadow-lg`}
-            >
-              <div className="flex items-start justify-end">
+          {filteredAchievements.map((achievement, index) => (
+            <div key={index} className={`bg-gradient-to-br ${achievement.color} rounded-xl p-6 transform hover:scale-105 transition-transform duration-200 shadow-lg`}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-xl font-bold text-white">{achievement.title}</h3>
+                  <p className="text-white/80 text-sm mt-1">{achievement.description}</p>
+                </div>
                 <span className="text-3xl font-bold text-white">{achievement.value}</span>
               </div>
-              <h3 className="text-xl font-bold text-white mt-4">{achievement.title}</h3>
-              <p className="text-white/80 text-sm mt-1">{achievement.description}</p>
+              <div className="mt-2">
+                <span className={`text-xs px-2 py-1 rounded ${achievement.source === 'serviceDesk' ? 'bg-cyan-900/50 text-cyan-200' : achievement.source === 'projects' ? 'bg-purple-900/50 text-purple-200' : 'bg-blue-900/50 text-blue-200'}`}>
+                  {achievement.source === 'serviceDesk' ? 'Service Desk' : achievement.source === 'projects' ? 'Projects' : 'Time Tracking'}
+                </span>
+              </div>
             </div>
           ))}
         </div>
       ) : (
         <div className="bg-gray-800 rounded-lg p-12 text-center mb-6">
-          <p className="text-gray-400 text-lg">
-            No achievements yet for {periodLabel.toLowerCase()}. Start logging time to earn badges!
-          </p>
+          <p className="text-gray-400 text-lg">No achievements yet for {periodLabel.toLowerCase()}. Start logging time to earn badges!</p>
         </div>
       )}
 
@@ -334,40 +266,37 @@ export default function Highlights() {
               )
             })()}
             
-            {/* Best Billable */}
-            {(() => {
-              const memberBillable = members.map(m => {
-                const memberEntries = filteredEntries.filter(e => e.memberId === m.id)
-                const total = memberEntries.reduce((sum, e) => sum + e.hours, 0)
-                const billable = memberEntries.filter(e => e.billableOption === 'Billable')
-                  .reduce((sum, e) => sum + e.hours, 0)
-                return { ...m, percent: total > 0 ? (billable / total) * 100 : 0, total }
-              }).filter(m => m.total > 10).sort((a, b) => b.percent - a.percent)
-              const top = memberBillable[0]
+            {/* Best Service (if service desk enabled) */}
+            {includesServiceDesk && (() => {
+              const memberTickets = members.map(m => {
+                const id = m.identifier.toLowerCase()
+                const tickets = filteredServiceTickets.filter(t => t.owner?.toLowerCase() === id || t.resources?.toLowerCase().includes(id))
+                return { ...m, closed: tickets.filter(t => t.closedFlag).length }
+              }).filter(m => m.closed > 0).sort((a, b) => b.closed - a.closed)
+              const top = memberTickets[0]
               if (!top) return null
               return (
-                <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg p-4">
-                  <p className="text-green-100 text-sm">Best Billable %</p>
+                <div className="bg-gradient-to-br from-cyan-500 to-teal-600 rounded-lg p-4">
+                  <p className="text-cyan-100 text-sm">Service Champion</p>
                   <p className="text-white text-xl font-bold">{top.firstName} {top.lastName}</p>
-                  <p className="text-green-100 text-2xl font-bold mt-2">{top.percent.toFixed(0)}%</p>
+                  <p className="text-cyan-100 text-2xl font-bold mt-2">{top.closed} resolved</p>
                 </div>
               )
             })()}
             
-            {/* Best Notes */}
-            {(() => {
-              const memberNotes = members.map(m => {
-                const memberEntries = filteredEntries.filter(e => e.memberId === m.id)
-                const withNotes = memberEntries.filter(e => e.notes && e.notes.trim().length > 0).length
-                return { ...m, percent: memberEntries.length > 0 ? (withNotes / memberEntries.length) * 100 : 0, total: memberEntries.length }
-              }).filter(m => m.total > 10).sort((a, b) => b.percent - a.percent)
-              const top = memberNotes[0]
+            {/* Best Projects (if projects enabled) */}
+            {includesProjects && (() => {
+              const memberProjects = members.map(m => ({
+                ...m,
+                count: filteredProjects.filter(p => p.managerIdentifier?.toLowerCase() === m.identifier.toLowerCase()).length
+              })).filter(m => m.count > 0).sort((a, b) => b.count - a.count)
+              const top = memberProjects[0]
               if (!top) return null
               return (
-                <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-4">
-                  <p className="text-blue-100 text-sm">Best Documentation</p>
+                <div className="bg-gradient-to-br from-purple-500 to-violet-600 rounded-lg p-4">
+                  <p className="text-purple-100 text-sm">Project Leader</p>
                   <p className="text-white text-xl font-bold">{top.firstName} {top.lastName}</p>
-                  <p className="text-blue-100 text-2xl font-bold mt-2">{top.percent.toFixed(0)}%</p>
+                  <p className="text-purple-100 text-2xl font-bold mt-2">{top.count} projects</p>
                 </div>
               )
             })()}
@@ -379,42 +308,18 @@ export default function Highlights() {
       <div className="bg-gray-800 rounded-lg p-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold text-white">AI-Powered Summary</h3>
-          <button
-            onClick={generateAIHighlights}
-            disabled={isGeneratingHighlights}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              isGeneratingHighlights
-                ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700 text-white'
-            }`}
-          >
-            {isGeneratingHighlights ? (
-              <span className="flex items-center gap-2">
-                <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
-                Creating summary...
-              </span>
-            ) : (
-              'Generate Summary'
-            )}
+          <button onClick={generateAIHighlights} disabled={isGeneratingHighlights}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${isGeneratingHighlights ? 'bg-gray-600 text-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}>
+            {isGeneratingHighlights ? <span className="flex items-center gap-2"><span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>Creating...</span> : 'Generate Summary'}
           </button>
         </div>
-        
-        {highlightError && (
-          <div className="bg-red-600/20 border border-red-500 rounded-lg p-4 mb-4">
-            <p className="text-red-400">{highlightError}</p>
-          </div>
-        )}
-        
+        {highlightError && <div className="bg-red-600/20 border border-red-500 rounded-lg p-4 mb-4"><p className="text-red-400">{highlightError}</p></div>}
         {aiHighlights ? (
           <div className="bg-gradient-to-br from-gray-700 to-gray-800 rounded-lg p-6">
-            <div className="whitespace-pre-wrap text-gray-200 leading-relaxed text-lg">
-              {aiHighlights}
-            </div>
+            <div className="whitespace-pre-wrap text-gray-200 leading-relaxed text-lg">{aiHighlights}</div>
           </div>
         ) : (
-          <p className="text-gray-400">
-            Click the button to generate a personalized AI summary of your achievements!
-          </p>
+          <p className="text-gray-400">Click the button to generate a personalized AI summary of your achievements!</p>
         )}
       </div>
     </div>

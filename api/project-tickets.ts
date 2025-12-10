@@ -1,12 +1,12 @@
 /**
  * Project Tickets API Endpoint
  * 
- * Fetches project tickets from ConnectWise /project/tickets API
+ * Fetches project tickets from the database (synced from ConnectWise)
  * These are tickets that belong to projects (different from service tickets)
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import ConnectWiseClient from './connectwise.js'
+import prisma from './db.js'
 
 export default async function handler(
   req: VercelRequest,
@@ -26,53 +26,60 @@ export default async function handler(
   }
 
   try {
-    const config = {
-      clientId: process.env.CW_CLIENT_ID || '',
-      publicKey: process.env.CW_PUBLIC_KEY || '',
-      privateKey: process.env.CW_PRIVATE_KEY || '',
-      baseUrl: process.env.CW_BASE_URL || '',
-      companyId: process.env.CW_COMPANY_ID || '',
-    }
-
-    // Validate config
-    const missing = Object.entries(config)
-      .filter(([, value]) => !value)
-      .map(([key]) => key)
-
-    if (missing.length > 0) {
-      console.error('[Project Tickets API] Missing config:', missing)
-      return res.status(500).json({ 
-        error: 'Server configuration error',
-        details: `Missing: ${missing.join(', ')}`
-      })
-    }
-
-    const client = new ConnectWiseClient(config)
-
-    // Parse query params
     const { projectId } = req.query
 
-    // Parse project ID if provided
-    const projId = projectId 
-      ? parseInt(projectId as string, 10)
-      : undefined
+    console.log('[API /project-tickets] Query params:', { projectId })
 
-    console.log('[Project Tickets API] Fetching ALL project tickets', { projectId: projId })
+    // Build where clause
+    const where: any = {}
 
-    // Fetch all project tickets - no limit (pageSize 1000 is CW max per request)
-    const tickets = await client.getProjectTickets(projId, {
-      pageSize: 1000,
+    if (projectId) {
+      where.projectId = parseInt(projectId as string, 10)
+    }
+
+    console.log('[API /project-tickets] Fetching project tickets from database...')
+    
+    const tickets = await prisma.projectTicket.findMany({
+      where,
+      include: {
+        project: true,
+      },
+      orderBy: {
+        id: 'desc',
+      },
     })
 
-    console.log(`[Project Tickets API] Fetched ${tickets.length} project tickets`)
+    console.log(`[API /project-tickets] Returning ${tickets.length} project tickets from database`)
+    
+    // Transform to match expected format (matching CW API structure)
+    const transformed = tickets.map(t => ({
+      id: t.id,
+      summary: t.summary,
+      project: { 
+        id: t.projectId, 
+        name: t.projectName || t.project?.name 
+      },
+      phase: t.phaseId ? { id: t.phaseId, name: t.phaseName } : null,
+      board: t.boardId ? { id: t.boardId, name: t.boardName } : null,
+      status: { name: t.status },
+      company: { name: t.company },
+      resources: t.resources,
+      closedFlag: t.closedFlag,
+      priority: { name: t.priority },
+      type: { name: t.type },
+      wbsCode: t.wbsCode,
+      budgetHours: t.budgetHours,
+      actualHours: t.actualHours,
+      dateEntered: t.dateEntered?.toISOString(),
+      closedDate: t.closedDate?.toISOString(),
+    }))
 
-    return res.status(200).json(tickets)
+    return res.status(200).json(transformed)
   } catch (error: any) {
-    console.error('[Project Tickets API] Error:', error.message)
+    console.error('[API /project-tickets] Error:', error)
     return res.status(500).json({ 
       error: 'Failed to fetch project tickets',
       message: error.message 
     })
   }
 }
-

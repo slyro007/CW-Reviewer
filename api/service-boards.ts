@@ -1,3 +1,9 @@
+/**
+ * Service Boards API Endpoint
+ * 
+ * Returns the list of service board IDs for filtering service tickets
+ */
+
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import prisma from './db.js'
 
@@ -19,34 +25,26 @@ export default async function handler(
   }
 
   try {
-    console.log('[API /members] Fetching members from database...')
+    console.log('[API /service-boards] Fetching service boards from database...')
     
-    const members = await prisma.member.findMany({
-      where: {
-        inactiveFlag: false,
-      },
+    const serviceBoards = await prisma.serviceBoard.findMany({
       orderBy: {
-        firstName: 'asc',
+        name: 'asc',
       },
     })
 
-    console.log(`[API /members] Returning ${members.length} members from database`)
+    console.log(`[API /service-boards] Returning ${serviceBoards.length} service boards from database`)
     
     // Transform to match expected format
-    const transformed = members.map(m => ({
-      id: m.id,
-      identifier: m.identifier,
-      firstName: m.firstName || '',
-      lastName: m.lastName || '',
-      email: m.email || '',
-      inactiveFlag: m.inactiveFlag,
+    const transformed = serviceBoards.map(b => ({
+      id: b.boardId,
+      name: b.name,
     }))
 
     return res.status(200).json(transformed)
   } catch (error: any) {
-    console.error('[API /members] Error:', error)
-    return res.status(500).json({ 
-      error: error.message || 'Failed to fetch members' 
-    })
+    console.error('[API /service-boards] Error:', error)
+    return res.status(500).json({ error: error.message || 'Failed to fetch service boards' })
   }
 }
+

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import ConnectWiseClient from './connectwise.js'
+import prisma from './db.js'
 
 export default async function handler(
   req: VercelRequest,
@@ -21,27 +21,35 @@ export default async function handler(
   try {
     const { type } = req.query
 
-    const client = new ConnectWiseClient({
-      clientId: process.env.CW_CLIENT_ID || process.env.VITE_CW_CLIENT_ID || '',
-      publicKey: process.env.CW_PUBLIC_KEY || process.env.VITE_CW_PUBLIC_KEY || '',
-      privateKey: process.env.CW_PRIVATE_KEY || '',
-      baseUrl: process.env.CW_BASE_URL || process.env.VITE_CW_BASE_URL || '',
-      companyId: process.env.CW_COMPANY_ID || process.env.VITE_CW_COMPANY_ID || '',
+    console.log('[API /boards] Query params:', { type })
+
+    // Build where clause
+    const where: any = {}
+    if (type) {
+      where.type = type as string
+    }
+
+    console.log('[API /boards] Fetching boards from database...')
+    
+    const boards = await prisma.board.findMany({
+      where,
+      orderBy: {
+        name: 'asc',
+      },
     })
 
-    const boards = await client.getBoards(type as 'MS' | 'PS' | undefined)
+    console.log(`[API /boards] Returning ${boards.length} boards from database`)
     
-    // Transform to only include necessary fields
-    const transformed = boards.map((b: any) => ({
+    // Transform to match expected format
+    const transformed = boards.map(b => ({
       id: b.id,
       name: b.name,
-      type: b.name.includes('MS') ? 'MS' : b.name.includes('PS') ? 'PS' : 'OTHER',
+      type: b.type,
     }))
 
-    res.status(200).json(transformed)
+    return res.status(200).json(transformed)
   } catch (error: any) {
-    console.error('Error fetching boards:', error)
-    res.status(500).json({ error: error.message || 'Failed to fetch boards' })
+    console.error('[API /boards] Error:', error)
+    return res.status(500).json({ error: error.message || 'Failed to fetch boards' })
   }
 }
-

@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import ConnectWiseClient from './connectwise.js'
+import prisma from './db.js'
 
 export default async function handler(
   req: VercelRequest,
@@ -21,39 +21,57 @@ export default async function handler(
   try {
     const { startDate, endDate, memberIds } = req.query
 
-    const client = new ConnectWiseClient({
-      clientId: process.env.CW_CLIENT_ID || process.env.VITE_CW_CLIENT_ID || '',
-      publicKey: process.env.CW_PUBLIC_KEY || process.env.VITE_CW_PUBLIC_KEY || '',
-      privateKey: process.env.CW_PRIVATE_KEY || '',
-      baseUrl: process.env.CW_BASE_URL || process.env.VITE_CW_BASE_URL || '',
-      companyId: process.env.CW_COMPANY_ID || process.env.VITE_CW_COMPANY_ID || '',
+    console.log('[API /time-entries] Query params:', { startDate, endDate, memberIds })
+
+    // Build where clause
+    const where: any = {}
+
+    if (startDate || endDate) {
+      where.dateStart = {}
+      if (startDate) {
+        where.dateStart.gte = new Date(startDate as string)
+      }
+      if (endDate) {
+        where.dateStart.lte = new Date(endDate as string)
+      }
+    }
+
+    if (memberIds) {
+      const memberIdArray = (memberIds as string).split(',').map(Number)
+      where.memberId = { in: memberIdArray }
+    }
+
+    console.log('[API /time-entries] Fetching time entries from database...')
+    
+    const entries = await prisma.timeEntry.findMany({
+      where,
+      include: {
+        member: true,
+        ticket: true,
+      },
+      orderBy: {
+        dateStart: 'desc',
+      },
     })
 
-    const start = startDate ? new Date(startDate as string) : undefined
-    const end = endDate ? new Date(endDate as string) : undefined
-    const memberIdArray = memberIds 
-      ? (memberIds as string).split(',').map(Number)
-      : undefined
-
-    const entries = await client.getTimeEntries(start, end, memberIdArray)
+    console.log(`[API /time-entries] Returning ${entries.length} time entries from database`)
     
-    // Transform to only include necessary fields
-    const transformed = entries.map((e: any) => ({
+    // Transform to match expected format
+    const transformed = entries.map(e => ({
       id: e.id,
-      memberId: e.member?.id,
-      ticketId: e.ticket?.id,
-      hours: e.actualHours || e.hours,
+      memberId: e.memberId,
+      ticketId: e.ticketId,
+      hours: e.hours,
       billableOption: e.billableOption,
       notes: e.notes,
-      dateStart: e.timeStart, // ConnectWise uses timeStart, not dateStart
-      dateEnd: e.timeEnd,
+      dateStart: e.dateStart.toISOString(),
+      dateEnd: e.dateEnd?.toISOString(),
       internalNotes: e.internalNotes,
     }))
 
-    res.status(200).json(transformed)
+    return res.status(200).json(transformed)
   } catch (error: any) {
-    console.error('Error fetching time entries:', error)
-    res.status(500).json({ error: error.message || 'Failed to fetch time entries' })
+    console.error('[API /time-entries] Error:', error)
+    return res.status(500).json({ error: error.message || 'Failed to fetch time entries' })
   }
 }
-

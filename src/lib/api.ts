@@ -110,6 +110,9 @@ export const api = {
     return fetchAPI<any[]>(`/boards${query}`)
   },
 
+  // Service Boards (for service desk filtering)
+  getServiceBoards: () => fetchAPI<any[]>('/service-boards'),
+
   // Projects (ConnectWise Project Management)
   getProjects: (params?: {
     managerIds?: string[]
@@ -137,6 +140,23 @@ export const api = {
     fetchAPI<{ analysis: string }>('/analyze', {
       method: 'POST',
       body: JSON.stringify({ template, data, options }),
+    }),
+
+  // Sync
+  getSyncStatus: () => 
+    fetchAPI<{
+      isStale: boolean
+      lastSync: string | null
+      entities: Record<string, { lastSync: string | null; isStale: boolean; count: number }>
+    }>('/sync'),
+
+  performSync: (options?: { force?: boolean; entities?: string[] }) =>
+    fetchAPI<{
+      results: Array<{ entity: string; synced: boolean; count: number; message: string }>
+      syncedAt: string
+    }>('/sync', {
+      method: 'POST',
+      body: JSON.stringify(options || {}),
     }),
 }
 

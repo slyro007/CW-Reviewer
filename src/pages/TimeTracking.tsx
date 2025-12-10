@@ -2,13 +2,17 @@ import { useEffect, useState, useMemo } from 'react'
 import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
 import { useMembersStore } from '@/stores/membersStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
+import { useTicketsStore } from '@/stores/ticketsStore'
+import { useProjectsStore } from '@/stores/projectsStore'
 import { useTimePeriodStore } from '@/stores/timePeriodStore'
+import DataSourceFilter, { useDataSources } from '@/components/DataSourceFilter'
 import { format } from 'date-fns'
 import { api } from '@/lib/api'
 
 interface EngineerAnalytics {
   memberId: number
   name: string
+  identifier: string
   totalHours: number
   billableHours: number
   billablePercent: number
@@ -16,66 +20,74 @@ interface EngineerAnalytics {
   avgHoursPerDay: number
   entriesCount: number
   daysWorked: number
+  serviceTicketsWorked: number
+  serviceTicketsClosed: number
+  projectTicketsWorked: number
+  projectTicketsClosed: number
 }
 
 export default function TimeTracking() {
   const { selectedEngineerId } = useSelectedEngineerStore()
   const { members } = useMembersStore()
   const { entries, isLoading, fetchTimeEntries } = useTimeEntriesStore()
+  const { serviceTickets, fetchServiceBoardTickets } = useTicketsStore()
+  const { projects, projectTickets, fetchProjects, fetchProjectTickets } = useProjectsStore()
   const { getDateRange, getPeriodLabel } = useTimePeriodStore()
+  
+  const { dataSources, setDataSources, includesServiceDesk, includesProjects } = useDataSources()
   const [isGeneratingAnalysis, setIsGeneratingAnalysis] = useState(false)
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
 
   const dateRange = getDateRange()
   const periodLabel = getPeriodLabel()
+  const selectedEngineer = selectedEngineerId ? members.find(m => m.id === selectedEngineerId) : null
 
-  const selectedEngineer = selectedEngineerId 
-    ? members.find(m => m.id === selectedEngineerId)
-    : null
-
-  // Auto-fetch time entries based on global date range
   useEffect(() => {
-    fetchTimeEntries({
-      startDate: format(dateRange.start, 'yyyy-MM-dd'),
-      endDate: format(dateRange.end, 'yyyy-MM-dd'),
-    })
+    fetchTimeEntries({ startDate: format(dateRange.start, 'yyyy-MM-dd'), endDate: format(dateRange.end, 'yyyy-MM-dd') })
+    fetchServiceBoardTickets()
+    fetchProjects()
+    fetchProjectTickets()
   }, [dateRange.start.getTime(), dateRange.end.getTime()])
 
-  // Filter entries based on selected engineer and date range
+  // Filter entries
   const filteredEntries = useMemo(() => {
     let result = entries.filter(e => {
       const entryDate = new Date(e.dateStart)
       return entryDate >= dateRange.start && entryDate <= dateRange.end
     })
-    
-    if (selectedEngineerId !== null) {
-      result = result.filter(e => e.memberId === selectedEngineerId)
-    }
-    
+    if (selectedEngineerId !== null) result = result.filter(e => e.memberId === selectedEngineerId)
     return result
   }, [entries, selectedEngineerId, dateRange])
 
   // Calculate analytics for each engineer
   const engineerAnalytics = useMemo((): EngineerAnalytics[] => {
-    const targetMembers = selectedEngineerId 
-      ? members.filter(m => m.id === selectedEngineerId)
-      : members
+    const targetMembers = selectedEngineerId ? members.filter(m => m.id === selectedEngineerId) : members
 
     return targetMembers.map(member => {
       const memberEntries = filteredEntries.filter(e => e.memberId === member.id)
       const totalHours = memberEntries.reduce((sum, e) => sum + e.hours, 0)
-      const billableHours = memberEntries
-        .filter(e => e.billableOption === 'Billable')
-        .reduce((sum, e) => sum + e.hours, 0)
+      const billableHours = memberEntries.filter(e => e.billableOption === 'Billable').reduce((sum, e) => sum + e.hours, 0)
       const withNotes = memberEntries.filter(e => e.notes && e.notes.trim().length > 0).length
-      const uniqueDays = new Set(memberEntries.map(e => 
-        new Date(e.dateStart).toDateString()
-      )).size
+      const uniqueDays = new Set(memberEntries.map(e => new Date(e.dateStart).toDateString())).size
+      const identifier = member.identifier.toLowerCase()
+
+      // Service desk stats
+      const memberServiceTickets = includesServiceDesk ? serviceTickets.filter(t => 
+        t.owner?.toLowerCase() === identifier || t.resources?.toLowerCase().includes(identifier)
+      ) : []
+      
+      // Project stats
+      const memberProjects = includesProjects ? projects.filter(p => p.managerIdentifier?.toLowerCase() === identifier) : []
+      const memberProjectIds = memberProjects.map(p => p.id)
+      const memberProjectTickets = includesProjects ? projectTickets.filter(t => 
+        memberProjectIds.includes(t.projectId) || t.resources?.toLowerCase().includes(identifier)
+      ) : []
 
       return {
         memberId: member.id,
         name: `${member.firstName} ${member.lastName}`,
+        identifier,
         totalHours,
         billableHours,
         billablePercent: totalHours > 0 ? (billableHours / totalHours) * 100 : 0,
@@ -83,11 +95,15 @@ export default function TimeTracking() {
         avgHoursPerDay: uniqueDays > 0 ? totalHours / uniqueDays : 0,
         entriesCount: memberEntries.length,
         daysWorked: uniqueDays,
+        serviceTicketsWorked: memberServiceTickets.length,
+        serviceTicketsClosed: memberServiceTickets.filter(t => t.closedFlag).length,
+        projectTicketsWorked: memberProjectTickets.length,
+        projectTicketsClosed: memberProjectTickets.filter(t => t.closedFlag).length,
       }
     }).sort((a, b) => b.totalHours - a.totalHours)
-  }, [members, filteredEntries, selectedEngineerId])
+  }, [members, filteredEntries, serviceTickets, projects, projectTickets, selectedEngineerId, includesServiceDesk, includesProjects])
 
-  // Calculate aggregate stats
+  // Aggregate stats
   const aggregateStats = useMemo(() => {
     const totalHours = engineerAnalytics.reduce((sum, e) => sum + e.totalHours, 0)
     const billableHours = engineerAnalytics.reduce((sum, e) => sum + e.billableHours, 0)
@@ -95,92 +111,32 @@ export default function TimeTracking() {
     const withNotes = filteredEntries.filter(e => e.notes && e.notes.trim().length > 0).length
 
     return {
-      totalHours,
-      billableHours,
+      totalHours, billableHours,
       billablePercent: totalHours > 0 ? (billableHours / totalHours) * 100 : 0,
       totalEntries,
       notesPercent: totalEntries > 0 ? (withNotes / totalEntries) * 100 : 0,
       engineerCount: engineerAnalytics.length,
+      serviceTickets: engineerAnalytics.reduce((sum, e) => sum + e.serviceTicketsWorked, 0),
+      projectTickets: engineerAnalytics.reduce((sum, e) => sum + e.projectTicketsWorked, 0),
     }
   }, [engineerAnalytics, filteredEntries])
 
-  // Generate AI analysis
   const generateAIAnalysis = async () => {
     setIsGeneratingAnalysis(true)
     setAnalysisError(null)
-    
     try {
-      const analysisData = {
-        period: periodLabel,
-        dateRange: {
-          start: dateRange.start.toISOString(),
-          end: dateRange.end.toISOString(),
-        },
-        aggregateStats,
-        engineerAnalytics: engineerAnalytics.map(e => ({
-          name: e.name,
-          totalHours: e.totalHours.toFixed(1),
-          billablePercent: e.billablePercent.toFixed(0),
-          notesPercent: e.notesPercent.toFixed(0),
-          avgHoursPerDay: e.avgHoursPerDay.toFixed(1),
-          daysWorked: e.daysWorked,
-        })),
-        focusEngineer: selectedEngineer ? `${selectedEngineer.firstName} ${selectedEngineer.lastName}` : null,
-      }
-
-      const prompt = selectedEngineer
-        ? `Analyze the time tracking performance for ${selectedEngineer.firstName} ${selectedEngineer.lastName} for ${periodLabel}. 
-           
-           Stats:
-           - Total Hours: ${engineerAnalytics[0]?.totalHours.toFixed(1) || 0}
-           - Billable %: ${engineerAnalytics[0]?.billablePercent.toFixed(0) || 0}%
-           - Notes Quality: ${engineerAnalytics[0]?.notesPercent.toFixed(0) || 0}%
-           - Avg Hours/Day: ${engineerAnalytics[0]?.avgHoursPerDay.toFixed(1) || 0}
-           - Days Worked: ${engineerAnalytics[0]?.daysWorked || 0}
-           
-           Provide a comprehensive analysis including:
-           1. Overall performance assessment
-           2. Strengths observed
-           3. Areas for improvement
-           4. Specific recommendations
-           5. Comparison to typical MSP engineer benchmarks
-           
-           Keep the tone professional and constructive.`
-        : `Analyze the team's time tracking performance for ${periodLabel}.
-           
-           Team Stats:
-           - Total Hours: ${aggregateStats.totalHours.toFixed(1)}
-           - Billable %: ${aggregateStats.billablePercent.toFixed(0)}%
-           - Notes Quality: ${aggregateStats.notesPercent.toFixed(0)}%
-           - Engineers: ${aggregateStats.engineerCount}
-           
-           Individual Performance:
-           ${engineerAnalytics.map(e => `- ${e.name}: ${e.totalHours.toFixed(0)}h, ${e.billablePercent.toFixed(0)}% billable, ${e.notesPercent.toFixed(0)}% notes`).join('\n')}
-           
-           Provide a comprehensive team analysis including:
-           1. Overall team performance
-           2. Top performers and why
-           3. Areas needing attention
-           4. Team-wide recommendations
-           5. Comparison to MSP industry benchmarks
-           
-           Keep the tone professional and actionable.`
-
       const response = await api.generateAnalysis('engineerAnalysis', {
-        prompt,
-        data: analysisData,
+        prompt: `Analyze time tracking performance for ${selectedEngineer ? selectedEngineer.firstName : 'the team'} during ${periodLabel}.`,
+        data: { aggregateStats, engineerAnalytics, dataSources },
       })
-      
       setAiAnalysis(response.analysis)
     } catch (error: any) {
-      console.error('Error generating analysis:', error)
       setAnalysisError(error.message || 'Failed to generate analysis')
     } finally {
       setIsGeneratingAnalysis(false)
     }
   }
 
-  // Get performance rating
   const getPerformanceRating = (analytics: EngineerAnalytics): { label: string; color: string } => {
     const score = (analytics.billablePercent * 0.4) + (analytics.notesPercent * 0.3) + (Math.min(analytics.avgHoursPerDay / 8, 1) * 100 * 0.3)
     if (score >= 80) return { label: 'Excellent', color: 'text-green-400 bg-green-500/20' }
@@ -191,14 +147,15 @@ export default function TimeTracking() {
 
   return (
     <div className="px-4 py-6 sm:px-0">
-      <div className="mb-6">
-        <h2 className="text-3xl font-bold text-white mb-2">Engineer Analytics</h2>
-        <p className="text-gray-400">
-          {selectedEngineer 
-            ? `Performance analysis for ${selectedEngineer.firstName} ${selectedEngineer.lastName}`
-            : 'Team performance analytics and insights'}
-          {' • '}<span className="text-blue-400">{periodLabel}</span>
-        </p>
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-bold text-white mb-2">Engineer Analytics</h2>
+          <p className="text-gray-400">
+            {selectedEngineer ? `Performance analysis for ${selectedEngineer.firstName} ${selectedEngineer.lastName}` : 'Team performance analytics'}
+            {' • '}<span className="text-blue-400">{periodLabel}</span>
+          </p>
+        </div>
+        <DataSourceFilter selected={dataSources} onChange={setDataSources} />
       </div>
 
       {isLoading ? (
@@ -208,28 +165,28 @@ export default function TimeTracking() {
         </div>
       ) : (
         <>
-          {/* Aggregate Stats Cards */}
+          {/* Aggregate Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl p-6">
-              <h3 className="text-sm font-medium text-blue-100 mb-1">Total Hours</h3>
-              <p className="text-4xl font-bold text-white">{aggregateStats.totalHours.toFixed(0)}</p>
-              <p className="text-sm text-blue-200 mt-1">{periodLabel}</p>
+            <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl p-5">
+              <h3 className="text-xs font-medium text-blue-100 mb-1">Total Hours</h3>
+              <p className="text-3xl font-bold text-white">{aggregateStats.totalHours.toFixed(0)}</p>
             </div>
-            <div className="bg-gradient-to-br from-green-600 to-emerald-700 rounded-xl p-6">
-              <h3 className="text-sm font-medium text-green-100 mb-1">Billable %</h3>
-              <p className="text-4xl font-bold text-white">{aggregateStats.billablePercent.toFixed(0)}%</p>
-              <p className="text-sm text-green-200 mt-1">{aggregateStats.billableHours.toFixed(0)}h billable</p>
+            <div className="bg-gradient-to-br from-green-600 to-emerald-700 rounded-xl p-5">
+              <h3 className="text-xs font-medium text-green-100 mb-1">Billable %</h3>
+              <p className="text-3xl font-bold text-white">{aggregateStats.billablePercent.toFixed(0)}%</p>
             </div>
-            <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl p-6">
-              <h3 className="text-sm font-medium text-blue-100 mb-1">Notes Quality</h3>
-              <p className="text-4xl font-bold text-white">{aggregateStats.notesPercent.toFixed(0)}%</p>
-              <p className="text-sm text-blue-200 mt-1">Entries with notes</p>
-            </div>
-            <div className="bg-gradient-to-br from-orange-600 to-orange-700 rounded-xl p-6">
-              <h3 className="text-sm font-medium text-orange-100 mb-1">Time Entries</h3>
-              <p className="text-4xl font-bold text-white">{aggregateStats.totalEntries}</p>
-              <p className="text-sm text-orange-200 mt-1">Total entries logged</p>
-            </div>
+            {includesServiceDesk && (
+              <div className="bg-gradient-to-br from-cyan-600 to-cyan-700 rounded-xl p-5">
+                <h3 className="text-xs font-medium text-cyan-100 mb-1">Service Tickets</h3>
+                <p className="text-3xl font-bold text-white">{aggregateStats.serviceTickets}</p>
+              </div>
+            )}
+            {includesProjects && (
+              <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl p-5">
+                <h3 className="text-xs font-medium text-purple-100 mb-1">Project Tickets</h3>
+                <p className="text-3xl font-bold text-white">{aggregateStats.projectTickets}</p>
+              </div>
+            )}
           </div>
 
           {/* Engineer Performance Cards */}
@@ -237,23 +194,17 @@ export default function TimeTracking() {
             <h3 className="text-xl font-semibold text-white mb-4">
               {selectedEngineer ? 'Performance Summary' : 'Engineer Performance'}
             </h3>
-            
             {engineerAnalytics.length === 0 ? (
-              <p className="text-gray-400">No data available for the selected period</p>
+              <p className="text-gray-400">No data available</p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {engineerAnalytics.map((engineer) => {
                   const rating = getPerformanceRating(engineer)
                   return (
-                    <div 
-                      key={engineer.memberId} 
-                      className="bg-gray-700/50 rounded-lg p-5 border border-gray-600"
-                    >
+                    <div key={engineer.memberId} className="bg-gray-700/50 rounded-lg p-5 border border-gray-600">
                       <div className="flex items-center justify-between mb-4">
                         <h4 className="text-lg font-semibold text-white">{engineer.name}</h4>
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${rating.color}`}>
-                          {rating.label}
-                        </span>
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${rating.color}`}>{rating.label}</span>
                       </div>
                       
                       <div className="space-y-3">
@@ -263,10 +214,7 @@ export default function TimeTracking() {
                             <span className="text-white font-medium">{engineer.totalHours.toFixed(1)}h</span>
                           </div>
                           <div className="h-2 bg-gray-600 rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-blue-500 rounded-full"
-                              style={{ width: `${Math.min((engineer.totalHours / Math.max(...engineerAnalytics.map(e => e.totalHours))) * 100, 100)}%` }}
-                            />
+                            <div className="h-full bg-blue-500 rounded-full" style={{ width: `${Math.min((engineer.totalHours / Math.max(...engineerAnalytics.map(e => e.totalHours))) * 100, 100)}%` }} />
                           </div>
                         </div>
                         
@@ -276,42 +224,23 @@ export default function TimeTracking() {
                             <span className="text-white font-medium">{engineer.billablePercent.toFixed(0)}%</span>
                           </div>
                           <div className="h-2 bg-gray-600 rounded-full overflow-hidden">
-                            <div 
-                              className={`h-full rounded-full ${
-                                engineer.billablePercent >= 70 ? 'bg-green-500' :
-                                engineer.billablePercent >= 50 ? 'bg-yellow-500' : 'bg-red-500'
-                              }`}
-                              style={{ width: `${engineer.billablePercent}%` }}
-                            />
+                            <div className={`h-full rounded-full ${engineer.billablePercent >= 70 ? 'bg-green-500' : engineer.billablePercent >= 50 ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${engineer.billablePercent}%` }} />
                           </div>
                         </div>
+
+                        {includesServiceDesk && (
+                          <div className="flex justify-between text-sm pt-2 border-t border-gray-600">
+                            <span className="text-cyan-400">Service Tickets</span>
+                            <span className="text-white">{engineer.serviceTicketsWorked} ({engineer.serviceTicketsClosed} closed)</span>
+                          </div>
+                        )}
                         
-                        <div>
-                          <div className="flex justify-between text-sm mb-1">
-                            <span className="text-gray-400">Notes Quality</span>
-                            <span className="text-white font-medium">{engineer.notesPercent.toFixed(0)}%</span>
+                        {includesProjects && (
+                          <div className="flex justify-between text-sm">
+                            <span className="text-purple-400">Project Tickets</span>
+                            <span className="text-white">{engineer.projectTicketsWorked} ({engineer.projectTicketsClosed} closed)</span>
                           </div>
-                          <div className="h-2 bg-gray-600 rounded-full overflow-hidden">
-                            <div 
-                              className={`h-full rounded-full ${
-                                engineer.notesPercent >= 80 ? 'bg-blue-500' :
-                                engineer.notesPercent >= 50 ? 'bg-blue-400' : 'bg-blue-300'
-                              }`}
-                              style={{ width: `${engineer.notesPercent}%` }}
-                            />
-                          </div>
-                        </div>
-                        
-                        <div className="pt-2 border-t border-gray-600 grid grid-cols-2 gap-4">
-                          <div>
-                            <p className="text-xs text-gray-400">Avg Hours/Day</p>
-                            <p className="text-lg font-semibold text-white">{engineer.avgHoursPerDay.toFixed(1)}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-400">Days Worked</p>
-                            <p className="text-lg font-semibold text-white">{engineer.daysWorked}</p>
-                          </div>
-                        </div>
+                        )}
                       </div>
                     </div>
                   )
@@ -320,52 +249,24 @@ export default function TimeTracking() {
             )}
           </div>
 
-          {/* AI Analysis Section */}
+          {/* AI Analysis */}
           <div className="bg-gray-800 rounded-lg p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-semibold text-white">
-                AI Performance Insights
-              </h3>
-              <button
-                onClick={generateAIAnalysis}
-                disabled={isGeneratingAnalysis || engineerAnalytics.length === 0}
-                className={`px-5 py-2.5 rounded-lg font-medium transition-all ${
-                  isGeneratingAnalysis || engineerAnalytics.length === 0
-                    ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
-                }`}
-              >
-                {isGeneratingAnalysis ? (
-                  <span className="flex items-center gap-2">
-                    <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
-                    Analyzing...
-                  </span>
-                ) : (
-                  'Generate AI Analysis'
-                )}
+              <h3 className="text-xl font-semibold text-white">AI Performance Insights</h3>
+              <button onClick={generateAIAnalysis} disabled={isGeneratingAnalysis || engineerAnalytics.length === 0}
+                className={`px-5 py-2.5 rounded-lg font-medium transition-all ${isGeneratingAnalysis || engineerAnalytics.length === 0 ? 'bg-gray-600 text-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}>
+                {isGeneratingAnalysis ? <span className="flex items-center gap-2"><span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>Analyzing...</span> : 'Generate AI Analysis'}
               </button>
             </div>
-            
-            {analysisError && (
-              <div className="bg-red-600/20 border border-red-500 rounded-lg p-4 mb-4">
-                <p className="text-red-400">{analysisError}</p>
-              </div>
-            )}
-            
+            {analysisError && <div className="bg-red-600/20 border border-red-500 rounded-lg p-4 mb-4"><p className="text-red-400">{analysisError}</p></div>}
             {aiAnalysis ? (
               <div className="bg-gradient-to-br from-gray-700 to-gray-750 rounded-lg p-6 border border-gray-600">
-                <div className="whitespace-pre-wrap text-gray-200 leading-relaxed">
-                  {aiAnalysis}
-                </div>
+                <div className="whitespace-pre-wrap text-gray-200 leading-relaxed">{aiAnalysis}</div>
               </div>
             ) : (
               <div className="text-center py-8 bg-gray-700/30 rounded-lg border border-dashed border-gray-600">
-                <p className="text-gray-400 text-lg mb-2">
-                  Get AI-powered insights about {selectedEngineer ? `${selectedEngineer.firstName}'s` : 'your team\'s'} performance
-                </p>
-                <p className="text-gray-500 text-sm">
-                  Click "Generate AI Analysis" for personalized recommendations and performance assessment
-                </p>
+                <p className="text-gray-400 text-lg mb-2">Get AI-powered insights about {selectedEngineer ? `${selectedEngineer.firstName}'s` : 'team'} performance</p>
+                <p className="text-gray-500 text-sm">Click "Generate AI Analysis" for personalized recommendations</p>
               </div>
             )}
           </div>

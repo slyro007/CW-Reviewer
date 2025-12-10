@@ -3,7 +3,8 @@ import type { Member } from '@/types'
 import { api } from '@/lib/api'
 
 // Only these 7 engineers should appear in the app (case-insensitive matching)
-const ALLOWED_MEMBER_IDENTIFIERS = [
+// This list is also defined in api/config.ts for backend sync
+export const ALLOWED_MEMBER_IDENTIFIERS = [
   'bwolff',    // Bryan Wolff
   'kmoreno',   // Kevin Moreno
   'scano',     // Shyanne Johnson-Cano
