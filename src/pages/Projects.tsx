@@ -13,7 +13,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   PieChart,
   Pie,
@@ -28,14 +27,6 @@ const STATUS_COLORS: Record<string, string> = {
   'Completed': '#22c55e',
   'Closed': '#10b981',
   'On Hold': '#ef4444',
-}
-
-const PRIORITY_COLORS: Record<string, string> = {
-  'Priority 1 - Emergency': '#ef4444',
-  'Priority 2 - Critical': '#f97316',
-  'Priority 3 - High': '#eab308',
-  'Priority 4 - Medium': '#3b82f6',
-  'Priority 5 - Low': '#22c55e',
 }
 
 export default function Projects() {
@@ -144,21 +135,6 @@ export default function Projects() {
     }))
   }, [filteredTickets])
 
-  // Calculate priority distribution
-  const priorityDistribution = useMemo(() => {
-    const dist: Record<string, number> = {}
-    filteredTickets.forEach(t => {
-      const priority = t.priority || 'Unknown'
-      dist[priority] = (dist[priority] || 0) + 1
-    })
-    return Object.entries(dist).map(([name, value]) => ({
-      name: name.replace('Priority ', 'P').split(' - ')[0],
-      fullName: name,
-      value,
-      color: PRIORITY_COLORS[name] || '#6b7280',
-    }))
-  }, [filteredTickets])
-
   // Calculate type distribution
   const typeDistribution = useMemo(() => {
     const dist: Record<string, number> = {}
@@ -205,15 +181,6 @@ export default function Projects() {
       variance: totalEstimated > 0 ? ((totalActual - totalEstimated) / totalEstimated) * 100 : 0,
     }
   }, [filteredTickets])
-
-  // Format resolution time
-  const formatResolutionTime = (hours?: number) => {
-    if (!hours) return 'N/A'
-    if (hours < 24) return `${hours.toFixed(1)}h`
-    const days = Math.floor(hours / 24)
-    const remainingHours = hours % 24
-    return `${days}d ${remainingHours.toFixed(0)}h`
-  }
 
   // Generate AI Analysis
   const generateAIAnalysis = async () => {
