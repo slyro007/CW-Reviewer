@@ -89,7 +89,16 @@ export default function TimeTracking() {
       }) : []
       
       // Project stats - filter by date range and engineer
-      const memberProjects = includesProjects ? projects.filter(p => p.managerIdentifier?.toLowerCase() === identifier) : []
+      // Include projects where engineer is manager OR has time entries
+      const memberTimeEntryProjectIds = new Set(
+        memberEntries
+          .filter(e => e.projectId !== null && e.projectId !== undefined)
+          .map(e => e.projectId!)
+      )
+      const memberProjects = includesProjects ? projects.filter(p => 
+        p.managerIdentifier?.toLowerCase() === identifier ||
+        memberTimeEntryProjectIds.has(p.id)
+      ) : []
       const memberProjectIds = memberProjects.map(p => p.id)
       const memberProjectTickets = includesProjects ? projectTickets.filter(t => {
         // Filter by date range

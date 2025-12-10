@@ -75,12 +75,24 @@ export default function Highlights() {
     return result
   }, [serviceTickets, selectedEngineer, filteredEntries, dateRange, includesServiceDesk])
 
-  // Filter projects
+  // Filter projects - include projects where engineer is manager OR has time entries
   const filteredProjects = useMemo(() => {
     if (!includesProjects) return []
-    if (selectedEngineer) return projects.filter(p => p.managerIdentifier?.toLowerCase() === selectedEngineer.identifier.toLowerCase())
+    if (selectedEngineer) {
+      const identifier = selectedEngineer.identifier.toLowerCase()
+      // Get project IDs from time entries
+      const timeEntryProjectIds = new Set(
+        filteredEntries
+          .filter(e => e.memberId === selectedEngineer.id && e.projectId !== null && e.projectId !== undefined)
+          .map(e => e.projectId!)
+      )
+      return projects.filter(p => 
+        p.managerIdentifier?.toLowerCase() === identifier ||
+        timeEntryProjectIds.has(p.id)
+      )
+    }
     return projects
-  }, [projects, selectedEngineer, includesProjects])
+  }, [projects, selectedEngineer, includesProjects, filteredEntries])
 
   const filteredProjectTickets = useMemo(() => {
     if (!includesProjects) return []

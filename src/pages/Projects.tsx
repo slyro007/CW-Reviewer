@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
 import { useMembersStore } from '@/stores/membersStore'
 import { useProjectsStore } from '@/stores/projectsStore'
+import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
 import { useTimePeriodStore } from '@/stores/timePeriodStore'
 import { format, differenceInDays } from 'date-fns'
 import { api } from '@/lib/api'
@@ -56,6 +57,7 @@ export default function Projects() {
     fetchProjects, fetchProjectTickets, 
     getProjectStats, getProjectTicketStats 
   } = useProjectsStore()
+  const { entries } = useTimeEntriesStore()
   const { getPeriodLabel, getDateRange } = useTimePeriodStore()
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
@@ -92,10 +94,18 @@ export default function Projects() {
   const filteredProjects = useMemo(() => {
     let result = projects
 
-    // Filter by selected engineer (manager)
+    // Filter by selected engineer (manager OR has time entries)
     if (selectedEngineer) {
+      const identifier = selectedEngineer.identifier.toLowerCase()
+      // Get project IDs from time entries
+      const timeEntryProjectIds = new Set(
+        entries
+          .filter(e => e.memberId === selectedEngineer.id && e.projectId !== null && e.projectId !== undefined)
+          .map(e => e.projectId!)
+      )
       result = result.filter(p => 
-        p.managerIdentifier?.toLowerCase() === selectedEngineer.identifier.toLowerCase()
+        p.managerIdentifier?.toLowerCase() === identifier ||
+        timeEntryProjectIds.has(p.id)
       )
     }
 
@@ -113,7 +123,7 @@ export default function Projects() {
     }
 
     return result
-  }, [projects, selectedEngineer, statusFilter, searchQuery])
+  }, [projects, selectedEngineer, statusFilter, searchQuery, entries])
 
   // Filter project tickets based on engineer, date range, and filters
   const filteredTickets = useMemo(() => {

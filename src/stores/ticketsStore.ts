@@ -79,8 +79,8 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
         closedFlag: t.closedFlag || false,
         dateEntered: t.dateEntered ? new Date(t.dateEntered) : undefined,
         resolvedDate: t.resolvedDate ? new Date(t.resolvedDate) : undefined,
-        resolutionTime: t.closedDate && t.dateEntered 
-          ? (new Date(t.closedDate).getTime() - new Date(t.dateEntered).getTime()) / (1000 * 60 * 60)
+        resolutionTime: (t.resolvedDate || t.closedDate) && t.dateEntered 
+          ? (new Date(t.resolvedDate || t.closedDate).getTime() - new Date(t.dateEntered).getTime()) / (1000 * 60 * 60)
           : undefined,
         // Additional project fields
         type: t.type?.name || undefined,
@@ -164,8 +164,8 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
         closedFlag: t.closedFlag || false,
         dateEntered: t.dateEntered ? new Date(t.dateEntered) : undefined,
         resolvedDate: t.resolvedDate ? new Date(t.resolvedDate) : undefined,
-        resolutionTime: t.closedDate && t.dateEntered 
-          ? (new Date(t.closedDate).getTime() - new Date(t.dateEntered).getTime()) / (1000 * 60 * 60)
+        resolutionTime: (t.resolvedDate || t.closedDate) && t.dateEntered 
+          ? (new Date(t.resolvedDate || t.closedDate).getTime() - new Date(t.dateEntered).getTime()) / (1000 * 60 * 60)
           : undefined,
         // Additional project fields
         type: t.type?.name || undefined,
@@ -215,8 +215,8 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
         closedFlag: t.closedFlag || false,
         dateEntered: t.dateEntered ? new Date(t.dateEntered) : undefined,
         resolvedDate: t.resolvedDate ? new Date(t.resolvedDate) : undefined,
-        resolutionTime: t.closedDate && t.dateEntered 
-          ? (new Date(t.closedDate).getTime() - new Date(t.dateEntered).getTime()) / (1000 * 60 * 60)
+        resolutionTime: (t.resolvedDate || t.closedDate) && t.dateEntered 
+          ? (new Date(t.resolvedDate || t.closedDate).getTime() - new Date(t.dateEntered).getTime()) / (1000 * 60 * 60)
           : undefined,
         type: t.type?.name || undefined,
         priority: t.priority?.name || undefined,

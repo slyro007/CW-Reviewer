@@ -125,19 +125,26 @@ export default function Compare() {
       )
       const closedServiceTickets = memberServiceTickets.filter(t => t.closedFlag)
       const resolutionTimes = closedServiceTickets
-        .filter(t => t.dateEntered && t.closedDate)
+        .filter(t => t.dateEntered && (t.resolvedDate || t.closedDate))
         .map(t => {
           const entered = new Date(t.dateEntered!)
-          const closed = new Date(t.closedDate!)
-          return (closed.getTime() - entered.getTime()) / (1000 * 60 * 60) // hours
+          const resolved = new Date(t.resolvedDate || t.closedDate!)
+          return (resolved.getTime() - entered.getTime()) / (1000 * 60 * 60) // hours
         })
+        .filter(rt => rt > 0) // Filter out invalid/negative resolution times
       const avgResolutionTime = resolutionTimes.length > 0
         ? resolutionTimes.reduce((a, b) => a + b, 0) / resolutionTimes.length
         : 0
 
-      // Project stats
+      // Project stats - include projects where engineer is manager OR has time entries
+      const memberTimeEntryProjectIds = new Set(
+        memberEntries
+          .filter(e => e.projectId !== null && e.projectId !== undefined)
+          .map(e => e.projectId!)
+      )
       const memberProjects = projects.filter(p => 
-        p.managerIdentifier?.toLowerCase() === identifier
+        p.managerIdentifier?.toLowerCase() === identifier ||
+        memberTimeEntryProjectIds.has(p.id)
       )
       const memberProjectIds = memberProjects.map(p => p.id)
       const memberProjectTickets = filteredProjectTickets.filter(t => 

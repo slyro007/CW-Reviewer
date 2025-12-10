@@ -4,6 +4,7 @@ import { useMembersStore } from '@/stores/membersStore'
 import { useTicketsStore, SERVICE_BOARD_NAMES } from '@/stores/ticketsStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
 import { useTimePeriodStore } from '@/stores/timePeriodStore'
+import TimePeriodSelector from '@/components/TimePeriodSelector'
 import { differenceInHours } from 'date-fns'
 import { api } from '@/lib/api'
 import {
@@ -118,11 +119,13 @@ export default function ServiceTickets() {
       result = result.filter(t => engineerTicketIds.has(t.id))
     }
 
-    // Filter by date range (dateEntered)
+    // Filter by date range (dateEntered) - include full end day
     result = result.filter(t => {
       if (!t.dateEntered) return true
       const entered = new Date(t.dateEntered)
-      return entered >= dateRange.start && entered <= dateRange.end
+      const endOfDay = new Date(dateRange.end)
+      endOfDay.setHours(23, 59, 59, 999)
+      return entered >= dateRange.start && entered <= endOfDay
     })
 
     if (boardFilter !== 'all') {
@@ -257,17 +260,20 @@ Keep the tone professional and actionable.`
 
   return (
     <div className="px-4 py-6 sm:px-0">
-      <div className="mb-6">
-        <h2 className="text-3xl font-bold text-white mb-2">Service Tickets</h2>
-        <p className="text-gray-400">
-          {selectedEngineer 
-            ? `Tickets worked by ${selectedEngineer.firstName} ${selectedEngineer.lastName}`
-            : 'All service desk tickets'}
-          {' • '}<span className="text-blue-400">{periodLabel}</span>
-        </p>
-        <p className="text-gray-500 text-sm mt-1">
-          Boards: {SERVICE_BOARD_NAMES.join(' • ')}
-        </p>
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-bold text-white mb-2">Service Tickets</h2>
+          <p className="text-gray-400">
+            {selectedEngineer 
+              ? `Tickets worked by ${selectedEngineer.firstName} ${selectedEngineer.lastName}`
+              : 'All service desk tickets'}
+            {' • '}<span className="text-blue-400">{periodLabel}</span>
+          </p>
+          <p className="text-gray-500 text-sm mt-1">
+            Boards: {SERVICE_BOARD_NAMES.join(' • ')}
+          </p>
+        </div>
+        <TimePeriodSelector />
       </div>
 
       {error && (
