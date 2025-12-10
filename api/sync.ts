@@ -121,7 +121,7 @@ export default async function handler(
 
         // Determine if this is an incremental sync or full sync
         // Full sync: first time (no lastSyncAt), force=true, or for members/boards (small datasets)
-        const isIncrementalSync = lastSyncAt && !force && !['members', 'boards'].includes(entityType)
+        const isIncrementalSync = Boolean(lastSyncAt && !force && !['members', 'boards'].includes(entityType))
         const syncMode = isIncrementalSync ? 'incremental' : 'full'
         
         console.log(`[Sync] Starting ${syncMode} sync for ${entityType}...`)
