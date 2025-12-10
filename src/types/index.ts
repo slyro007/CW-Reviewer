@@ -3,6 +3,7 @@ export interface TimeEntry {
   id: number
   memberId: number
   ticketId?: number
+  projectId?: number
   hours: number
   billableOption?: string
   notes?: string

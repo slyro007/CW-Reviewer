@@ -57,6 +57,7 @@ export const useTimeEntriesStore = create<TimeEntriesState>((set, get) => ({
         id: e.id,
         memberId: e.memberId || e.member?.id, // API returns memberId directly
         ticketId: e.ticketId || e.ticket?.id,
+        projectId: e.projectId || e.project?.id,
         hours: e.hours || 0,
         billableOption: e.billableOption,
         notes: e.notes,

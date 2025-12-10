@@ -61,6 +61,7 @@ export default async function handler(
       id: e.id,
       memberId: e.memberId,
       ticketId: e.ticketId,
+      projectId: e.projectId,
       hours: e.hours,
       billableOption: e.billableOption,
       notes: e.notes,
