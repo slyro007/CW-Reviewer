@@ -15,7 +15,7 @@ export default function CWWrapped() {
   const { entries, fetchTimeEntries } = useTimeEntriesStore()
   const { serviceTickets, fetchServiceBoardTickets } = useTicketsStore()
   const { projects, projectTickets, fetchProjects, fetchProjectTickets } = useProjectsStore()
-  const { getDateRange, getPeriodLabel, timePeriod } = useTimePeriodStore()
+  const { getDateRange, getPeriodLabel } = useTimePeriodStore()
   
   const { dataSources, setDataSources, includesServiceDesk, includesProjects } = useDataSources()
   const [isGenerating, setIsGenerating] = useState(false)

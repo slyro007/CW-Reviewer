@@ -6,7 +6,7 @@ import { useTicketsStore } from '@/stores/ticketsStore'
 import { useProjectsStore } from '@/stores/projectsStore'
 import { useTimePeriodStore } from '@/stores/timePeriodStore'
 import DataSourceFilter, { useDataSources } from '@/components/DataSourceFilter'
-import { analyzeNoteQuality } from '@/lib/noteQuality'
+import { calculateNoteQuality } from '@/lib/noteQuality'
 import { format } from 'date-fns'
 
 interface NoteEntry {
@@ -25,7 +25,7 @@ export default function Notes() {
   const { selectedEngineerId } = useSelectedEngineerStore()
   const { members } = useMembersStore()
   const { entries, fetchTimeEntries } = useTimeEntriesStore()
-  const { serviceTickets, fetchServiceBoardTickets, serviceBoardIds } = useTicketsStore()
+  const { serviceTickets, fetchServiceBoardTickets } = useTicketsStore()
   const { projectTickets, fetchProjects, fetchProjectTickets } = useProjectsStore()
   const { getDateRange, getPeriodLabel } = useTimePeriodStore()
   
@@ -46,9 +46,6 @@ export default function Notes() {
   // Build lookup maps
   const serviceTicketMap = useMemo(() => new Map(serviceTickets.map(t => [t.id, t])), [serviceTickets])
   const projectTicketMap = useMemo(() => new Map(projectTickets.map(t => [t.id, t])), [projectTickets])
-  const serviceBoardIdSet = useMemo(() => new Set(serviceBoardIds), [serviceBoardIds])
-  // Get project board IDs from the project tickets
-  const projectBoardIdSet = useMemo(() => new Set(projectTickets.filter(t => t.boardId).map(t => t.boardId!)), [projectTickets])
 
   // Filter entries and enrich with ticket info
   const enrichedEntries = useMemo((): NoteEntry[] => {
@@ -64,38 +61,29 @@ export default function Notes() {
     // Filter by data source
     if (!includesServiceDesk && !includesProjects) return []
     
-    return result.map(entry => {
-      const boardId = entry.boardId
+    const mapped: NoteEntry[] = []
+
+    for (const entry of result) {
       const ticketId = entry.ticketId
       let source: 'serviceDesk' | 'projects' | 'unknown' = 'unknown'
       let ticketSummary: string | undefined
-      
-      // Determine source from board
-      if (boardId && serviceBoardIdSet.has(boardId)) {
+
+      if (ticketId && serviceTicketMap.has(ticketId)) {
         source = 'serviceDesk'
-        if (ticketId) ticketSummary = serviceTicketMap.get(ticketId)?.summary
-      } else if (boardId && projectBoardIdSet.has(boardId)) {
+        ticketSummary = serviceTicketMap.get(ticketId)?.summary
+      } else if (ticketId && projectTicketMap.has(ticketId)) {
         source = 'projects'
-        if (ticketId) ticketSummary = projectTicketMap.get(ticketId)?.summary
-      } else if (ticketId) {
-        // Try to find ticket in either map
-        if (serviceTicketMap.has(ticketId)) {
-          source = 'serviceDesk'
-          ticketSummary = serviceTicketMap.get(ticketId)?.summary
-        } else if (projectTicketMap.has(ticketId)) {
-          source = 'projects'
-          ticketSummary = projectTicketMap.get(ticketId)?.summary
-        }
+        ticketSummary = projectTicketMap.get(ticketId)?.summary
       }
 
       // Filter based on selected data source
-      if (source === 'serviceDesk' && !includesServiceDesk) return null
-      if (source === 'projects' && !includesProjects) return null
-      if (source === 'unknown' && !(includesServiceDesk || includesProjects)) return null
+      if (source === 'serviceDesk' && !includesServiceDesk) continue
+      if (source === 'projects' && !includesProjects) continue
+      if (source === 'unknown' && !(includesServiceDesk || includesProjects)) continue
 
-      const qualityResult = analyzeNoteQuality(entry.notes)
+      const qualityResult = calculateNoteQuality(entry.notes, ticketSummary)
 
-      return {
+      mapped.push({
         id: entry.id,
         date: entry.dateStart,
         hours: entry.hours,
@@ -104,10 +92,12 @@ export default function Notes() {
         ticketId,
         ticketSummary,
         source,
-        qualityScore: qualityResult.score,
-      }
-    }).filter(Boolean) as NoteEntry[]
-  }, [entries, selectedEngineerId, dateRange, includesServiceDesk, includesProjects, serviceBoardIdSet, projectBoardIdSet, serviceTicketMap, projectTicketMap])
+        qualityScore: qualityResult.overall,
+      })
+    }
+
+    return mapped
+  }, [entries, selectedEngineerId, dateRange, includesServiceDesk, includesProjects, serviceTicketMap, projectTicketMap])
 
   // Apply filters and sorting
   const displayEntries = useMemo(() => {

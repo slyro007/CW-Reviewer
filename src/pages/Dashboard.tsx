@@ -6,7 +6,7 @@ import { useProjectsStore } from '@/stores/projectsStore'
 import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
 import { useTimePeriodStore } from '@/stores/timePeriodStore'
 import DataSourceFilter, { useDataSources } from '@/components/DataSourceFilter'
-import { format, differenceInHours } from 'date-fns'
+import { format } from 'date-fns'
 
 export default function Dashboard() {
   const { members, isLoading: membersLoading, fetchMembers } = useMembersStore()
@@ -16,7 +16,7 @@ export default function Dashboard() {
   const { selectedEngineerId } = useSelectedEngineerStore()
   const { getDateRange, getPeriodLabel } = useTimePeriodStore()
   
-  const { dataSources, setDataSources, includesServiceDesk, includesProjects, label: dataSourceLabel } = useDataSources()
+  const { dataSources, setDataSources, includesServiceDesk, includesProjects } = useDataSources()
   const dateRange = getDateRange()
 
   useEffect(() => {

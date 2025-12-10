@@ -6,7 +6,6 @@ export default function GlobalLoadingBar() {
     isSyncing, 
     syncProgress, 
     syncError, 
-    lastSyncStatus,
     checkSyncStatus, 
     performSync,
     clearSyncError 

@@ -304,7 +304,7 @@ export default function Compare() {
           </div>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
-          {members.map((member, idx) => (
+          {members.map((member) => (
             <label 
               key={member.id} 
               className={`flex items-center space-x-2 p-2 rounded cursor-pointer transition-colors ${
