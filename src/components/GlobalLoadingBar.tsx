@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { useGlobalLoadingStore } from '@/stores/globalLoadingStore'
 
 export default function GlobalLoadingBar() {
@@ -6,8 +5,6 @@ export default function GlobalLoadingBar() {
     isSyncing, 
     syncProgress, 
     syncError, 
-    checkSyncStatus, 
-    performSync,
     clearSyncError 
   } = useGlobalLoadingStore()
 

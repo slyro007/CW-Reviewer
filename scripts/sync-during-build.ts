@@ -58,8 +58,8 @@ async function performBuildSync() {
     let allowedMemberIds: number[] = []
     
     for (const entityType of entitiesToSync) {
-      const log = syncLogs.find(l => l.entityType === entityType)
-      const lastSyncAt = log?.lastSyncAt || null
+      const syncLogEntry = syncLogs.find(l => l.entityType === entityType)
+      const lastSyncAt = syncLogEntry?.lastSyncAt || null
       const isStale = !lastSyncAt || (now.getTime() - lastSyncAt.getTime() > SYNC_STALE_THRESHOLD_MS)
       
       // Determine sync mode
@@ -160,7 +160,7 @@ async function performBuildSync() {
           }
         }
 
-        const existingCount = log?.recordCount || 0
+        const existingCount = syncLogEntry?.recordCount || 0
         const newTotalCount = usedIncremental ? existingCount : count
 
         await prisma.syncLog.upsert({
