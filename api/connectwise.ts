@@ -43,19 +43,27 @@ class ConnectWiseClient {
       }
       
       const companyInfoUrl = `https://${siteUrl}/login/companyinfo/${this.config.companyId}`
+      console.log('[ConnectWise] Fetching codebase from:', companyInfoUrl)
       
       const response = await fetch(companyInfoUrl)
+      console.log('[ConnectWise] Codebase response status:', response.status)
+      
       if (response.ok) {
         const info = await response.json()
         // Cloud returns versioned codebase like "v2017_3/", on-premise returns "v4_6_release/"
         // Ensure it ends with / for proper URL construction
         const codebase = info.Codebase || 'v4_6_release/'
-        return codebase.endsWith('/') ? codebase : `${codebase}/`
+        const finalCodebase = codebase.endsWith('/') ? codebase : `${codebase}/`
+        console.log('[ConnectWise] Detected codebase:', finalCodebase)
+        return finalCodebase
+      } else {
+        console.warn('[ConnectWise] Codebase detection failed with status:', response.status)
       }
     } catch (error) {
       // If we can't determine, default to v4_6_release
-      console.warn('Could not determine codebase, using default:', error)
+      console.warn('[ConnectWise] Could not determine codebase, using default:', error)
     }
+    console.log('[ConnectWise] Using default codebase: v4_6_release/')
     return 'v4_6_release/'
   }
 
@@ -71,6 +79,7 @@ class ConnectWiseClient {
     }
     
     const url = new URL(`${this.config.baseUrl}/${this.codebase}apis/3.0${endpoint}`)
+    console.log('[ConnectWise] Request URL:', url.toString())
     url.searchParams.append('page', page.toString())
     url.searchParams.append('pageSize', pageSize.toString())
     if (conditions) {
@@ -102,8 +111,30 @@ class ConnectWiseClient {
     })
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => response.statusText)
-      throw new Error(`ConnectWise API error: ${response.status} ${errorText}`)
+      let errorText = response.statusText
+      try {
+        const errorBody = await response.text()
+        if (errorBody) {
+          try {
+            const errorJson = JSON.parse(errorBody)
+            errorText = errorJson.message || errorJson.error || errorBody
+          } catch {
+            errorText = errorBody.length > 200 ? errorBody.substring(0, 200) + '...' : errorBody
+          }
+        }
+      } catch (parseError) {
+        console.warn('[ConnectWise] Could not parse error response')
+      }
+      
+      console.error('[ConnectWise] API Error:', {
+        endpoint,
+        status: response.status,
+        statusText: response.statusText,
+        errorText,
+        url: url.toString(),
+      })
+      
+      throw new Error(`ConnectWise API error (${response.status}): ${errorText}`)
     }
 
     return response.json()

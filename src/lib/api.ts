@@ -7,19 +7,67 @@
 const API_BASE = import.meta.env.DEV ? '/api' : '/api'
 
 async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-  })
+  try {
+    const url = `${API_BASE}${endpoint}`
+    console.log(`[API] Fetching: ${url}`)
+    
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers,
+      },
+    })
 
-  if (!response.ok) {
-    throw new Error(`API error: ${response.statusText}`)
+    console.log(`[API] Response status: ${response.status} ${response.statusText}`)
+
+    if (!response.ok) {
+      // Try to get error details from response body
+      let errorMessage = `API error: ${response.status} ${response.statusText || 'Unknown error'}`
+      
+      try {
+        const errorBody = await response.text()
+        if (errorBody) {
+          try {
+            const errorJson = JSON.parse(errorBody)
+            errorMessage = errorJson.error || errorJson.message || errorMessage
+          } catch {
+            // If not JSON, use the text as error message
+            errorMessage = errorBody.length > 200 ? errorBody.substring(0, 200) + '...' : errorBody
+          }
+        }
+      } catch (parseError) {
+        console.error('[API] Failed to parse error response:', parseError)
+      }
+      
+      console.error(`[API] Error details:`, {
+        url,
+        status: response.status,
+        statusText: response.statusText,
+        errorMessage,
+      })
+      
+      throw new Error(errorMessage)
+    }
+
+    // Try to parse JSON response
+    try {
+      const data = await response.json()
+      return data
+    } catch (jsonError) {
+      console.error('[API] Failed to parse JSON response:', jsonError)
+      throw new Error('Invalid JSON response from API')
+    }
+  } catch (error: any) {
+    // If it's already our formatted error, re-throw it
+    if (error.message && error.message.startsWith('API error:')) {
+      throw error
+    }
+    
+    // Otherwise, wrap network/other errors
+    console.error('[API] Fetch error:', error)
+    throw new Error(`Network error: ${error.message || 'Failed to fetch'}`)
   }
-
-  return response.json()
 }
 
 export const api = {

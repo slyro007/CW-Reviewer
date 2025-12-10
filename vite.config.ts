@@ -12,6 +12,14 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        // In development, Vite dev server will proxy to Vercel dev server
+        // In production, Vercel handles this automatically
+      },
+    },
   },
 })
 

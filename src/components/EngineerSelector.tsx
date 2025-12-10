@@ -1,13 +1,25 @@
+import { useEffect } from 'react'
 import { useMembersStore } from '@/stores/membersStore'
 import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
 
 export default function EngineerSelector() {
-  const { members, isLoading } = useMembersStore()
+  const { members, isLoading, error, fetchMembers } = useMembersStore()
   const { selectedEngineerId, setSelectedEngineer } = useSelectedEngineerStore()
+
+  // Fetch members on mount if not already loaded
+  useEffect(() => {
+    if (members.length === 0 && !isLoading && !error) {
+      fetchMembers()
+    }
+  }, [members.length, isLoading, error, fetchMembers])
 
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value
     setSelectedEngineer(value === 'all' ? null : parseInt(value, 10))
+  }
+
+  const handleRetry = () => {
+    fetchMembers()
   }
 
   return (
@@ -24,6 +36,10 @@ export default function EngineerSelector() {
         <option value="all">All Engineers</option>
         {isLoading ? (
           <option disabled>Loading engineers...</option>
+        ) : error ? (
+          <option disabled>Error loading engineers</option>
+        ) : members.length === 0 ? (
+          <option disabled>No engineers found</option>
         ) : (
           members.map((member) => (
             <option key={member.id} value={member.id.toString()}>
@@ -32,6 +48,18 @@ export default function EngineerSelector() {
           ))
         )}
       </select>
+      
+      {error && (
+        <div className="mt-2 p-2 bg-red-900/50 border border-red-700 rounded text-sm">
+          <p className="text-red-300 mb-2">{error}</p>
+          <button
+            onClick={handleRetry}
+            className="text-blue-300 hover:text-blue-200 underline text-xs"
+          >
+            Retry
+          </button>
+        </div>
+      )}
     </div>
   )
 }
