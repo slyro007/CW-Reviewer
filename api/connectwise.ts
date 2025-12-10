@@ -39,8 +39,19 @@ class ConnectWiseClient {
   }
 
   private async getCodebase(): Promise<string> {
+    // Check for manual configuration first (recommended for production)
+    const envCodebase = process.env.CW_CODEBASE
+    if (envCodebase) {
+      const codebase = envCodebase.endsWith('/') ? envCodebase : `${envCodebase}/`
+      console.log('[ConnectWise] Using configured codebase:', codebase)
+      return codebase
+    }
+
     // For cloud environments, we need to detect the codebase dynamically
     // According to docs: https://ConnectWiseSite/login/companyinfo/CompanyId
+    // This is a fallback and may be unreliable in serverless environments
+    console.log('[ConnectWise] No CW_CODEBASE env var found, attempting dynamic detection...')
+    
     try {
       // Handle both api-na.myconnectwise.net and na.myconnectwise.net formats
       let siteUrl = this.config.baseUrl.replace('https://', '')
@@ -54,24 +65,42 @@ class ConnectWiseClient {
       const companyInfoUrl = `https://${siteUrl}/login/companyinfo/${this.config.companyId}`
       console.log('[ConnectWise] Fetching codebase from:', companyInfoUrl)
       
-      const response = await fetch(companyInfoUrl)
-      console.log('[ConnectWise] Codebase response status:', response.status)
+      // Add timeout to prevent hanging in serverless environment
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
       
-      if (response.ok) {
-        const info = await response.json()
-        // Cloud returns versioned codebase like "v2017_3/", on-premise returns "v4_6_release/"
-        // Ensure it ends with / for proper URL construction
-        const codebase = info.Codebase || 'v4_6_release/'
-        const finalCodebase = codebase.endsWith('/') ? codebase : `${codebase}/`
-        console.log('[ConnectWise] Detected codebase:', finalCodebase)
-        return finalCodebase
-      } else {
-        console.warn('[ConnectWise] Codebase detection failed with status:', response.status)
+      try {
+        const response = await fetch(companyInfoUrl, {
+          signal: controller.signal
+        })
+        clearTimeout(timeoutId)
+        
+        console.log('[ConnectWise] Codebase response status:', response.status)
+        
+        if (response.ok) {
+          const info = await response.json()
+          // Cloud returns versioned codebase like "v2017_3/", on-premise returns "v4_6_release/"
+          // Ensure it ends with / for proper URL construction
+          const codebase = info.Codebase || 'v4_6_release/'
+          const finalCodebase = codebase.endsWith('/') ? codebase : `${codebase}/`
+          console.log('[ConnectWise] Detected codebase:', finalCodebase)
+          return finalCodebase
+        } else {
+          console.warn('[ConnectWise] Codebase detection failed with status:', response.status)
+        }
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId)
+        if (fetchError.name === 'AbortError') {
+          console.warn('[ConnectWise] Codebase detection timed out after 5 seconds')
+        } else {
+          console.warn('[ConnectWise] Codebase fetch error:', fetchError.message)
+        }
       }
     } catch (error) {
       // If we can't determine, default to v4_6_release
       console.warn('[ConnectWise] Could not determine codebase, using default:', error)
     }
+    
     console.log('[ConnectWise] Using default codebase: v4_6_release/')
     return 'v4_6_release/'
   }

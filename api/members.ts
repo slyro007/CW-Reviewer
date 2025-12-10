@@ -20,6 +20,7 @@ export default async function handler(
     const privateKey = process.env.CW_PRIVATE_KEY
     const baseUrl = process.env.CW_BASE_URL || process.env.VITE_CW_BASE_URL
     const companyId = process.env.CW_COMPANY_ID || process.env.VITE_CW_COMPANY_ID
+    const codebase = process.env.CW_CODEBASE // Optional: manual codebase configuration
 
     console.log('[API /members] Environment check:', {
       hasClientId: !!clientId,
@@ -27,6 +28,8 @@ export default async function handler(
       hasPrivateKey: !!privateKey,
       hasBaseUrl: !!baseUrl,
       hasCompanyId: !!companyId,
+      hasCodebase: !!codebase,
+      codebase: codebase || '(will auto-detect)',
     })
 
     if (!clientId || !publicKey || !privateKey || !baseUrl || !companyId) {
@@ -43,24 +46,61 @@ export default async function handler(
       })
     }
 
+    // Recommend setting CW_CODEBASE for production
+    if (!codebase) {
+      console.warn('[API /members] ⚠️  CW_CODEBASE not set - will attempt auto-detection (may be unreliable in serverless)')
+    }
+
     console.log('[API /members] Creating ConnectWise client...')
-    const client = new ConnectWiseClient({
-      clientId,
-      publicKey,
-      privateKey,
-      baseUrl,
-      companyId,
-    })
+    let client
+    try {
+      client = new ConnectWiseClient({
+        clientId,
+        publicKey,
+        privateKey,
+        baseUrl,
+        companyId,
+      })
+    } catch (clientError: any) {
+      console.error('[API /members] Failed to create ConnectWise client:', clientError.message)
+      return res.status(500).json({ 
+        error: 'Failed to initialize ConnectWise client',
+        details: clientError.message
+      })
+    }
 
     console.log('[API /members] Fetching members from ConnectWise...')
-    const members = await client.getMembers()
+    let members
+    try {
+      members = await client.getMembers()
+    } catch (fetchError: any) {
+      console.error('[API /members] Failed to fetch members:', {
+        message: fetchError.message,
+        stack: fetchError.stack,
+      })
+      
+      // Provide specific error message
+      const errorMessage = fetchError.message || 'Failed to fetch members from ConnectWise'
+      const statusCode = fetchError.message?.includes('401') || fetchError.message?.includes('Unauthorized') 
+        ? 401 
+        : fetchError.message?.includes('404') || fetchError.message?.includes('Not Found')
+        ? 404
+        : 500
+      
+      return res.status(statusCode).json({ 
+        error: errorMessage,
+        hint: !codebase ? 'Consider setting CW_CODEBASE environment variable for more reliable operation' : undefined
+      })
+    }
+    
     console.log(`[API /members] Received ${members?.length || 0} members`)
     
     // Validate members is an array
     if (!Array.isArray(members)) {
       console.error('[API /members] Members is not an array:', typeof members)
       return res.status(500).json({ 
-        error: 'Invalid response format from ConnectWise API'
+        error: 'Invalid response format from ConnectWise API',
+        receivedType: typeof members
       })
     }
     
@@ -82,29 +122,29 @@ export default async function handler(
       }
     }).filter(m => m !== null && m.id !== null) // Remove invalid entries
 
-    console.log('[API /members] Returning transformed members')
+    console.log('[API /members] Returning %d transformed members', transformed.length)
     return res.status(200).json(transformed)
   } catch (error: any) {
-    console.error('[API /members] Error details:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name,
+    // Ultimate fallback - catch ANY unhandled error
+    console.error('[API /members] UNHANDLED ERROR:', {
+      message: error?.message || 'Unknown error',
+      stack: error?.stack || 'No stack trace',
+      name: error?.name || 'Unknown',
+      type: typeof error,
     })
     
-    // Return detailed error information
-    const errorMessage = error.message || 'Failed to fetch members'
-    const statusCode = error.message?.includes('401') || error.message?.includes('Unauthorized') 
-      ? 401 
-      : error.message?.includes('404') || error.message?.includes('Not Found')
-      ? 404
-      : 500
-    
-    // Ensure we always return a response
-    if (!res.headersSent) {
-      return res.status(statusCode).json({ 
-        error: errorMessage,
-        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
-      })
+    // ALWAYS return a response to prevent function invocation failure
+    try {
+      if (!res.headersSent) {
+        return res.status(500).json({ 
+          error: 'Internal server error',
+          message: error?.message || 'An unexpected error occurred',
+          hint: 'Check Vercel function logs for details'
+        })
+      }
+    } catch (responseError) {
+      // If even sending the error response fails, log it
+      console.error('[API /members] Failed to send error response:', responseError)
     }
   }
 }
