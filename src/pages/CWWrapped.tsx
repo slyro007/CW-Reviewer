@@ -32,6 +32,12 @@ export default function CWWrapped() {
   const [aiWrapped, setAiWrapped] = useState<string | null>(null)
   const [wrappedError, setWrappedError] = useState<string | null>(null)
   const [showWrapped, setShowWrapped] = useState(false)
+  const [progress, setProgress] = useState<{
+    step: string
+    current: number
+    total: number
+    data?: Record<string, any>
+  } | null>(null)
 
   const currentYear = new Date().getFullYear()
   const yearStart = startOfYear(new Date())
@@ -144,8 +150,65 @@ export default function CWWrapped() {
     setIsGenerating(true)
     setWrappedError(null)
     setShowWrapped(true)
+    setProgress({ step: 'Starting analysis...', current: 0, total: 6 })
     
     try {
+      // Step 1: Analyzing time entries
+      setProgress({ 
+        step: 'Analyzing time entries', 
+        current: 1, 
+        total: 6,
+        data: { entries: yearEntries.length, hours: stats.totalHours.toFixed(0) }
+      })
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Step 2: Processing tickets
+      setProgress({ 
+        step: 'Processing tickets', 
+        current: 2, 
+        total: 6,
+        data: { worked: stats.ticketsWorked, closed: stats.ticketsClosed }
+      })
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Step 3: Analyzing projects
+      setProgress({ 
+        step: 'Analyzing projects', 
+        current: 3, 
+        total: 6,
+        data: { projects: stats.projectsWorked }
+      })
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Step 4: Calculating statistics
+      setProgress({ 
+        step: 'Calculating statistics', 
+        current: 4, 
+        total: 6,
+        data: { 
+          billable: `${stats.billablePercent.toFixed(0)}%`,
+          notes: `${stats.notesPercent.toFixed(0)}%`,
+          streak: stats.longestStreak
+        }
+      })
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Step 5: Generating insights
+      setProgress({ 
+        step: 'Generating insights', 
+        current: 5, 
+        total: 6,
+        data: { topMonth: stats.topMonth.month }
+      })
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Step 6: Creating AI summary
+      setProgress({ 
+        step: 'Creating AI summary', 
+        current: 6, 
+        total: 6 
+      })
+
       const wrappedData = {
         period: `${currentYear}`,
         totalHours: stats.totalHours,
@@ -170,9 +233,11 @@ export default function CWWrapped() {
       })
       
       setAiWrapped(response.analysis)
+      setProgress(null)
     } catch (error: any) {
       console.error('Error generating wrapped:', error)
       setWrappedError(error.message || 'Failed to generate wrapped')
+      setProgress(null)
     } finally {
       setIsGenerating(false)
     }
@@ -183,7 +248,7 @@ export default function CWWrapped() {
   return (
     <div className="px-4 py-6 sm:px-0">
       <div className="mb-6">
-        <h2 className="text-3xl font-bold text-white mb-2">🎁 CW Wrapped {currentYear}</h2>
+        <h2 className="text-3xl font-bold text-white mb-2">CW Wrapped {currentYear}</h2>
         <p className="text-gray-400">
           {selectedEngineer 
             ? `${selectedEngineer.firstName} ${selectedEngineer.lastName}'s year in review`
@@ -193,10 +258,8 @@ export default function CWWrapped() {
 
       {!showWrapped ? (
         // Initial hero section with generate button
-        <div className="bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 rounded-xl p-8 mb-6 relative overflow-hidden">
-          <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2240%22%20height%3D%2240%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Ccircle%20cx%3D%222%22%20cy%3D%222%22%20r%3D%222%22%20fill%3D%22rgba(255%2C255%2C255%2C0.1)%22%2F%3E%3C%2Fsvg%3E')] opacity-30"></div>
-          <div className="relative z-10 text-center py-12">
-            <div className="text-8xl mb-6">🎉</div>
+        <div className="bg-gray-800 border border-gray-700 rounded-xl p-8 mb-6">
+          <div className="text-center py-12">
             <h3 className="text-4xl font-bold text-white mb-4">
               Your {currentYear} CW Wrapped
             </h3>
@@ -206,40 +269,37 @@ export default function CWWrapped() {
             <button 
               onClick={generateWrapped}
               disabled={isLoading}
-              className={`px-10 py-4 rounded-full font-bold text-lg transition-all transform hover:scale-105 ${
+              className={`px-10 py-4 rounded-lg font-bold text-lg transition-all ${
                 isLoading 
                   ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                  : 'bg-white text-purple-900 hover:bg-gray-100 shadow-lg hover:shadow-xl'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
               }`}
             >
-              {isLoading ? 'Loading data...' : '✨ Generate Your Wrapped'}
+              {isLoading ? 'Loading data...' : 'Generate Your Wrapped'}
             </button>
           </div>
         </div>
       ) : (
         <>
           {/* Year in Numbers - Fun Stats */}
-          <div className="bg-gradient-to-r from-purple-900 via-indigo-900 to-blue-900 rounded-xl p-6 mb-6 relative overflow-hidden">
-            <div className="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Ccircle%20cx%3D%221%22%20cy%3D%221%22%20r%3D%221%22%20fill%3D%22rgba(255%2C255%2C255%2C0.1)%22%2F%3E%3C%2Fsvg%3E')] opacity-30"></div>
-            <div className="relative z-10">
-              <h3 className="text-2xl font-bold text-white mb-6 text-center">🎉 Your {currentYear} in Numbers</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                <div className="text-center">
-                  <p className="text-5xl font-bold text-white">{stats.totalHours.toFixed(0)}</p>
-                  <p className="text-purple-200 mt-2">Hours Logged ⏰</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-5xl font-bold text-white">{stats.coffees}</p>
-                  <p className="text-purple-200 mt-2">Coffees Consumed ☕</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-5xl font-bold text-white">{stats.ticketsWorked}</p>
-                  <p className="text-purple-200 mt-2">Tickets Worked 🎫</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-5xl font-bold text-white">{stats.longestStreak}</p>
-                  <p className="text-purple-200 mt-2">Day Streak 🔥</p>
-                </div>
+          <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-6">
+            <h3 className="text-2xl font-bold text-white mb-6 text-center">Your {currentYear} in Numbers</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+              <div className="text-center">
+                <p className="text-5xl font-bold text-white">{stats.totalHours.toFixed(0)}</p>
+                <p className="text-gray-300 mt-2">Hours Logged</p>
+              </div>
+              <div className="text-center">
+                <p className="text-5xl font-bold text-white">{stats.coffees}</p>
+                <p className="text-gray-300 mt-2">Days of Work</p>
+              </div>
+              <div className="text-center">
+                <p className="text-5xl font-bold text-white">{stats.ticketsWorked}</p>
+                <p className="text-gray-300 mt-2">Tickets Worked</p>
+              </div>
+              <div className="text-center">
+                <p className="text-5xl font-bold text-white">{stats.longestStreak}</p>
+                <p className="text-gray-300 mt-2">Day Streak</p>
               </div>
             </div>
           </div>
@@ -247,8 +307,7 @@ export default function CWWrapped() {
           {/* Key Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 shadow-lg">
-              <div className="flex items-center justify-between">
-                <span className="text-4xl">⏱️</span>
+              <div className="flex items-center justify-end">
                 <span className="text-4xl font-bold text-white">{stats.totalHours.toFixed(0)}h</span>
               </div>
               <h3 className="text-xl font-bold text-white mt-4">Total Hours</h3>
@@ -256,26 +315,23 @@ export default function CWWrapped() {
             </div>
 
             <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-6 shadow-lg">
-              <div className="flex items-center justify-between">
-                <span className="text-4xl">💰</span>
+              <div className="flex items-center justify-end">
                 <span className="text-4xl font-bold text-white">{stats.billablePercent.toFixed(0)}%</span>
               </div>
               <h3 className="text-xl font-bold text-white mt-4">Billable Rate</h3>
               <p className="text-green-100 text-sm">{stats.billableHours.toFixed(0)}h billable</p>
             </div>
 
-            <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-6 shadow-lg">
-              <div className="flex items-center justify-between">
-                <span className="text-4xl">✅</span>
+            <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-6 shadow-lg">
+              <div className="flex items-center justify-end">
                 <span className="text-4xl font-bold text-white">{stats.ticketsClosed}</span>
               </div>
               <h3 className="text-xl font-bold text-white mt-4">Tickets Closed</h3>
-              <p className="text-purple-100 text-sm">Problems solved</p>
+              <p className="text-blue-100 text-sm">Problems solved</p>
             </div>
 
             <div className="bg-gradient-to-br from-orange-500 to-red-500 rounded-xl p-6 shadow-lg">
-              <div className="flex items-center justify-between">
-                <span className="text-4xl">📁</span>
+              <div className="flex items-center justify-end">
                 <span className="text-4xl font-bold text-white">{stats.projectsWorked}</span>
               </div>
               <h3 className="text-xl font-bold text-white mt-4">Projects</h3>
@@ -286,52 +342,174 @@ export default function CWWrapped() {
           {/* More Stats */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div className="bg-gray-800 rounded-xl p-6">
-              <div className="flex items-center gap-3 mb-2">
-                <span className="text-2xl">📊</span>
-                <h3 className="text-lg font-semibold text-white">Top Month</h3>
-              </div>
+              <h3 className="text-lg font-semibold text-white mb-2">Top Month</h3>
               <p className="text-3xl font-bold text-blue-400">{stats.topMonth.month}</p>
               <p className="text-gray-400">{stats.topMonth.hours.toFixed(0)} hours logged</p>
             </div>
 
             <div className="bg-gray-800 rounded-xl p-6">
-              <div className="flex items-center gap-3 mb-2">
-                <span className="text-2xl">📝</span>
-                <h3 className="text-lg font-semibold text-white">Documentation</h3>
-              </div>
-              <p className="text-3xl font-bold text-purple-400">{stats.notesPercent.toFixed(0)}%</p>
+              <h3 className="text-lg font-semibold text-white mb-2">Documentation</h3>
+              <p className="text-3xl font-bold text-blue-400">{stats.notesPercent.toFixed(0)}%</p>
               <p className="text-gray-400">Entries with notes</p>
             </div>
 
             <div className="bg-gray-800 rounded-xl p-6">
-              <div className="flex items-center gap-3 mb-2">
-                <span className="text-2xl">📈</span>
-                <h3 className="text-lg font-semibold text-white">Avg Per Day</h3>
-              </div>
+              <h3 className="text-lg font-semibold text-white mb-2">Avg Per Day</h3>
               <p className="text-3xl font-bold text-green-400">{stats.avgHoursPerDay.toFixed(1)}h</p>
               <p className="text-gray-400">On working days</p>
             </div>
           </div>
 
+          {/* Progress Dialog */}
+          {isGenerating && progress && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <div className="bg-gray-800 border border-gray-700 rounded-xl p-8 max-w-md w-full mx-4">
+                <div className="mb-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-xl font-bold text-white">Crunching Your Data...</h3>
+                    <span className="text-sm text-gray-400">{progress.current}/{progress.total}</span>
+                  </div>
+                  <div className="w-full bg-gray-700 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                    />
+                  </div>
+                </div>
+                
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full ${
+                      progress.current >= 1 ? 'bg-blue-500' : 'bg-gray-600'
+                    }`} />
+                    <div className="flex-1">
+                      <p className={`font-medium ${
+                        progress.current >= 1 ? 'text-white' : 'text-gray-400'
+                      }`}>
+                        Analyzing time entries
+                      </p>
+                      {progress.current >= 1 && progress.data?.entries !== undefined && (
+                        <p className="text-sm text-gray-400 mt-1">
+                          {progress.data.entries} entries • {progress.data.hours}h total
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full ${
+                      progress.current >= 2 ? 'bg-blue-500' : 'bg-gray-600'
+                    }`} />
+                    <div className="flex-1">
+                      <p className={`font-medium ${
+                        progress.current >= 2 ? 'text-white' : 'text-gray-400'
+                      }`}>
+                        Processing tickets
+                      </p>
+                      {progress.current >= 2 && progress.data?.worked !== undefined && (
+                        <p className="text-sm text-gray-400 mt-1">
+                          {progress.data.worked} worked • {progress.data.closed} closed
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full ${
+                      progress.current >= 3 ? 'bg-blue-500' : 'bg-gray-600'
+                    }`} />
+                    <div className="flex-1">
+                      <p className={`font-medium ${
+                        progress.current >= 3 ? 'text-white' : 'text-gray-400'
+                      }`}>
+                        Analyzing projects
+                      </p>
+                      {progress.current >= 3 && progress.data?.projects !== undefined && (
+                        <p className="text-sm text-gray-400 mt-1">
+                          {progress.data.projects} projects worked on
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full ${
+                      progress.current >= 4 ? 'bg-blue-500' : 'bg-gray-600'
+                    }`} />
+                    <div className="flex-1">
+                      <p className={`font-medium ${
+                        progress.current >= 4 ? 'text-white' : 'text-gray-400'
+                      }`}>
+                        Calculating statistics
+                      </p>
+                      {progress.current >= 4 && progress.data?.billable !== undefined && (
+                        <p className="text-sm text-gray-400 mt-1">
+                          {progress.data.billable} billable • {progress.data.notes} notes • {progress.data.streak} day streak
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full ${
+                      progress.current >= 5 ? 'bg-blue-500' : 'bg-gray-600'
+                    }`} />
+                    <div className="flex-1">
+                      <p className={`font-medium ${
+                        progress.current >= 5 ? 'text-white' : 'text-gray-400'
+                      }`}>
+                        Generating insights
+                      </p>
+                      {progress.current >= 5 && progress.data?.topMonth !== undefined && (
+                        <p className="text-sm text-gray-400 mt-1">
+                          Top month: {progress.data.topMonth}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full ${
+                      progress.current >= 6 ? 'bg-blue-500' : 'bg-gray-600'
+                    }`} />
+                    <div className="flex-1">
+                      <p className={`font-medium ${
+                        progress.current >= 6 ? 'text-white' : 'text-gray-400'
+                      }`}>
+                        Creating AI summary
+                      </p>
+                      {progress.current >= 6 && (
+                        <p className="text-sm text-gray-400 mt-1">
+                          Almost done...
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* AI Generated Wrapped */}
           <div className="bg-gray-800 rounded-xl p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-xl font-semibold text-white">🤖 AI Year in Review</h3>
+              <h3 className="text-xl font-semibold text-white">AI Year in Review</h3>
               <button
                 onClick={generateWrapped}
                 disabled={isGenerating}
                 className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                   isGenerating
                     ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white'
                 }`}
               >
                 {isGenerating ? (
                   <span className="flex items-center gap-2">
-                    <span className="animate-spin">✨</span> Creating...
+                    <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+                    Creating...
                   </span>
                 ) : (
-                  '✨ Regenerate'
+                  'Regenerate'
                 )}
               </button>
             </div>
@@ -344,7 +522,7 @@ export default function CWWrapped() {
             
             {isGenerating ? (
               <div className="text-center py-12">
-                <div className="animate-spin text-6xl mb-4">✨</div>
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
                 <p className="text-gray-400 text-lg">Creating your personalized year in review...</p>
               </div>
             ) : aiWrapped ? (

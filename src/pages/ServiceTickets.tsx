@@ -80,21 +80,40 @@ export default function ServiceTickets() {
     return Array.from(statuses).sort()
   }, [serviceTickets])
 
-  // Get tickets worked by selected engineer (based on time entries)
+  // Get tickets worked by selected engineer (based on time entries, owner, or resources)
   const engineerTicketIds = useMemo(() => {
-    if (!selectedEngineerId) return null
-    return new Set(
-      entries
-        .filter(e => e.memberId === selectedEngineerId && e.ticketId)
-        .map(e => e.ticketId)
-    )
-  }, [entries, selectedEngineerId])
+    if (!selectedEngineerId || !selectedEngineer) return null
+    const ticketIds = new Set<number>()
+    
+    // Add tickets with time entries
+    entries
+      .filter(e => e.memberId === selectedEngineerId && e.ticketId)
+      .forEach(e => {
+        if (e.ticketId) ticketIds.add(e.ticketId)
+      })
+    
+    // Add tickets where engineer is owner
+    serviceTickets
+      .filter(t => t.owner && t.owner.toLowerCase() === selectedEngineer.identifier.toLowerCase())
+      .forEach(t => ticketIds.add(t.id))
+    
+    // Add tickets where engineer is a resource/team member
+    serviceTickets
+      .filter(t => {
+        if (!t.resources) return false
+        const resourceIds = t.resources.split(',').map(r => r.trim().toLowerCase())
+        return resourceIds.includes(selectedEngineer.identifier.toLowerCase())
+      })
+      .forEach(t => ticketIds.add(t.id))
+    
+    return ticketIds
+  }, [entries, selectedEngineerId, selectedEngineer, serviceTickets])
 
   // Filter tickets
   const filteredTickets = useMemo(() => {
     let result = serviceTickets
 
-    // Filter by selected engineer's tickets (based on time entries)
+    // Filter by selected engineer's tickets (owner, resources, OR time entries)
     if (selectedEngineer && engineerTicketIds) {
       result = result.filter(t => engineerTicketIds.has(t.id))
     }
@@ -279,8 +298,8 @@ Keep the tone professional and actionable.`
           <h3 className="text-xs font-medium text-red-100 mb-1">Aging 7d+</h3>
           <p className="text-3xl font-bold text-white">{ageStats.over7d}</p>
         </div>
-        <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl p-5">
-          <h3 className="text-xs font-medium text-purple-100 mb-1">Boards</h3>
+        <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl p-5">
+          <h3 className="text-xs font-medium text-blue-100 mb-1">Boards</h3>
           <p className="text-3xl font-bold text-white">{availableServiceBoards.length}</p>
         </div>
       </div>
@@ -533,7 +552,7 @@ Keep the tone professional and actionable.`
       <div className="bg-gray-800 rounded-lg p-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-xl font-semibold text-white">
-            🤖 AI Service Desk Analysis
+            AI Service Desk Analysis
           </h3>
           <button
             onClick={generateAIAnalysis}
@@ -541,15 +560,16 @@ Keep the tone professional and actionable.`
             className={`px-5 py-2.5 rounded-lg font-medium transition-all ${
               isGeneratingAnalysis || filteredTickets.length === 0
                 ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl'
+                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
             }`}
           >
             {isGeneratingAnalysis ? (
               <span className="flex items-center gap-2">
-                <span className="animate-spin">⏳</span> Analyzing...
+                <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+                Analyzing...
               </span>
             ) : (
-              '✨ Generate Analysis'
+              'Generate Analysis'
             )}
           </button>
         </div>

@@ -11,7 +11,6 @@ interface CategoryScore {
   name: string
   score: number
   maxScore: number
-  icon: string
   color: string
   issues: string[]
   recommendations: string[]
@@ -104,7 +103,6 @@ export default function PerformanceReview() {
       name: 'Time Tracking',
       score: timeTrackingScore,
       maxScore: 100,
-      icon: '⏱️',
       color: 'blue',
       issues: timeIssues,
       recommendations: timeRecommendations,
@@ -132,8 +130,7 @@ export default function PerformanceReview() {
       name: 'Notes Quality',
       score: notesScore,
       maxScore: 100,
-      icon: '📝',
-      color: 'purple',
+      color: 'blue',
       issues: notesIssues,
       recommendations: notesRecommendations,
     })
@@ -160,7 +157,6 @@ export default function PerformanceReview() {
       name: 'Billability',
       score: billabilityScore,
       maxScore: 100,
-      icon: '💰',
       color: 'green',
       issues: billIssues,
       recommendations: billRecommendations,
@@ -192,7 +188,6 @@ export default function PerformanceReview() {
       name: 'Productivity',
       score: productivityScore,
       maxScore: 100,
-      icon: '🚀',
       color: 'orange',
       issues: prodIssues,
       recommendations: prodRecommendations,
@@ -265,7 +260,6 @@ export default function PerformanceReview() {
         </div>
         
         <div className="bg-gray-800 rounded-lg p-12 text-center">
-          <p className="text-6xl mb-4">👤</p>
           <p className="text-gray-400 text-lg">
             Please select an engineer to view their performance review
           </p>
@@ -289,10 +283,10 @@ export default function PerformanceReview() {
         <p className="text-white/80 text-lg mb-2">Overall Performance Score</p>
         <p className="text-7xl font-bold text-white mb-2">{overallScore}</p>
         <p className="text-white/80">
-          {overallScore >= 80 ? 'Excellent Performance! 🌟' :
-           overallScore >= 60 ? 'Good Performance 👍' :
-           overallScore >= 40 ? 'Needs Improvement 📈' :
-           'Requires Attention ⚠️'}
+          {overallScore >= 80 ? 'Excellent Performance' :
+           overallScore >= 60 ? 'Good Performance' :
+           overallScore >= 40 ? 'Needs Improvement' :
+           'Requires Attention'}
         </p>
       </div>
 
@@ -301,10 +295,7 @@ export default function PerformanceReview() {
         {categoryScores.map((category) => (
           <div key={category.name} className="bg-gray-800 rounded-lg p-6">
             <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">{category.icon}</span>
-                <h3 className="text-lg font-semibold text-white">{category.name}</h3>
-              </div>
+              <h3 className="text-lg font-semibold text-white">{category.name}</h3>
               <span className={`text-3xl font-bold ${getScoreColor(category.score)}`}>
                 {category.score}
               </span>
@@ -344,7 +335,7 @@ export default function PerformanceReview() {
                 <ul className="space-y-1">
                   {category.recommendations.map((rec, i) => (
                     <li key={i} className="text-sm text-blue-400 flex items-start gap-2">
-                      <span>💡</span> {rec}
+                      <span>•</span> {rec}
                     </li>
                   ))}
                 </ul>
@@ -361,7 +352,7 @@ export default function PerformanceReview() {
       {/* AI Review */}
       <div className="bg-gray-800 rounded-lg p-6">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold text-white">🤖 AI Performance Analysis</h3>
+          <h3 className="text-lg font-semibold text-white">AI Performance Analysis</h3>
           <button
             onClick={generateAIReview}
             disabled={isGeneratingReview}
@@ -373,7 +364,8 @@ export default function PerformanceReview() {
           >
             {isGeneratingReview ? (
               <span className="flex items-center gap-2">
-                <span className="animate-spin">⏳</span> Analyzing...
+                <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+                Analyzing...
               </span>
             ) : (
               'Generate Detailed Review'

@@ -395,7 +395,7 @@ export default function Compare() {
           {/* AI Insights */}
           <div className="bg-gray-800 rounded-lg p-6">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-white">🤖 AI Insights</h3>
+              <h3 className="text-lg font-semibold text-white">AI Insights</h3>
               <button
                 onClick={generateInsights}
                 disabled={isGeneratingInsights}
@@ -407,7 +407,8 @@ export default function Compare() {
               >
                 {isGeneratingInsights ? (
                   <span className="flex items-center gap-2">
-                    <span className="animate-spin">⏳</span> Analyzing...
+                    <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+                    Analyzing...
                   </span>
                 ) : (
                   'Generate Insights'

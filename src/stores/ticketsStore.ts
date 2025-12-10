@@ -8,8 +8,8 @@ const PROJECT_BOARD_NAME = 'Project Board'
 // Service desk boards to display in ServiceTickets page
 export const SERVICE_BOARD_NAMES = [
   'Escalations(MS)',
-  'Helpdesk(MS)',
-  'Helpdesk(TS)',
+  'HelpDesk (MS)', // Note: Exact capitalization from API
+  'HelpDesk (TS)', // Note: Exact capitalization from API
   'Triage',
   'RMM-Continuum',
   'WL Internal',
@@ -220,10 +220,11 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
           : undefined,
         type: t.type?.name || undefined,
         priority: t.priority?.name || undefined,
-        owner: t.owner?.identifier || undefined,
-        company: t.company?.name || undefined,
+        owner: t.owner?.identifier || t.owner || undefined,
+        company: t.company?.name || t.company || undefined,
         estimatedHours: t.estimatedHours || undefined,
         actualHours: t.actualHours || undefined,
+        resources: t.teamMember || t.resources || undefined,
       }))
       
       set({ serviceTickets, isLoadingService: false })

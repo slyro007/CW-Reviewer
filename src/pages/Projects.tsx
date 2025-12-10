@@ -294,7 +294,7 @@ Keep the tone professional and actionable.`
 
       {/* View Mode Toggle */}
       <div className="flex gap-2 mb-6">
-        <button
+          <button
           onClick={() => { setViewMode('projects'); setStatusFilter('all'); setSelectedProjectId(null); }}
           className={`px-4 py-2 rounded-lg font-medium transition-all ${
             viewMode === 'projects'
@@ -302,7 +302,7 @@ Keep the tone professional and actionable.`
               : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
           }`}
         >
-          📁 Projects ({projects.length})
+          Projects ({projects.length})
         </button>
         <button
           onClick={() => { setViewMode('tickets'); setStatusFilter('all'); }}
@@ -312,7 +312,7 @@ Keep the tone professional and actionable.`
               : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
           }`}
         >
-          🎫 Project Tickets ({projectTickets.length})
+          Project Tickets ({projectTickets.length})
         </button>
       </div>
 
@@ -340,8 +340,8 @@ Keep the tone professional and actionable.`
               <h3 className="text-xs font-medium text-green-100 mb-1">Closed</h3>
               <p className="text-3xl font-bold text-white">{stats.closed}</p>
             </div>
-            <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl p-5">
-              <h3 className="text-xs font-medium text-purple-100 mb-1">Avg Complete</h3>
+            <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl p-5">
+              <h3 className="text-xs font-medium text-blue-100 mb-1">Avg Complete</h3>
               <p className="text-3xl font-bold text-white">{stats.avgPercentComplete.toFixed(0)}%</p>
             </div>
           </>
@@ -363,8 +363,8 @@ Keep the tone professional and actionable.`
               <h3 className="text-xs font-medium text-green-100 mb-1">Engineers</h3>
               <p className="text-3xl font-bold text-white">{Object.keys(ticketStats.byEngineer).length}</p>
             </div>
-            <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl p-5">
-              <h3 className="text-xs font-medium text-purple-100 mb-1">Statuses</h3>
+            <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl p-5">
+              <h3 className="text-xs font-medium text-blue-100 mb-1">Statuses</h3>
               <p className="text-3xl font-bold text-white">{Object.keys(ticketStats.byStatus).length}</p>
             </div>
             <div className="bg-gradient-to-br from-orange-600 to-orange-700 rounded-xl p-5">
@@ -690,10 +690,10 @@ Keep the tone professional and actionable.`
                             </p>
                             <div className="flex gap-4 mt-1 text-sm text-gray-400">
                               {!selectedProjectId && ticket.projectName && (
-                                <span>📁 {ticket.projectName}</span>
+                                <span>{ticket.projectName}</span>
                               )}
                               {ticket.resources && (
-                                <span>👤 {ticket.resources}</span>
+                                <span className="ml-4">{ticket.resources}</span>
                               )}
                             </div>
                           </div>
@@ -726,7 +726,7 @@ Keep the tone professional and actionable.`
       <div className="bg-gray-800 rounded-lg p-6">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-xl font-semibold text-white">
-            🤖 AI Project Analysis
+            AI Project Analysis
           </h3>
           <button
             onClick={generateAIAnalysis}
@@ -734,15 +734,16 @@ Keep the tone professional and actionable.`
             className={`px-5 py-2.5 rounded-lg font-medium transition-all ${
               isGeneratingAnalysis || (filteredProjects.length === 0 && filteredTickets.length === 0)
                 ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl'
+                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
             }`}
           >
             {isGeneratingAnalysis ? (
               <span className="flex items-center gap-2">
-                <span className="animate-spin">⏳</span> Analyzing...
+                <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+                Analyzing...
               </span>
             ) : (
-              '✨ Generate Analysis'
+              'Generate Analysis'
             )}
           </button>
         </div>

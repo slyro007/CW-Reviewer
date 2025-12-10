@@ -208,7 +208,7 @@ export default function Trends() {
         </div>
         <div className="bg-gray-800 rounded-lg p-4">
           <h3 className="text-xs font-medium text-gray-400 mb-1">With Notes</h3>
-          <p className="text-2xl font-bold text-purple-400">{summaryStats.notesPercent.toFixed(0)}%</p>
+          <p className="text-2xl font-bold text-blue-400">{summaryStats.notesPercent.toFixed(0)}%</p>
         </div>
         <div className="bg-gray-800 rounded-lg p-4">
           <h3 className="text-xs font-medium text-gray-400 mb-1">Avg/Period</h3>

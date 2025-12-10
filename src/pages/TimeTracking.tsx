@@ -220,10 +220,10 @@ export default function TimeTracking() {
               <p className="text-4xl font-bold text-white">{aggregateStats.billablePercent.toFixed(0)}%</p>
               <p className="text-sm text-green-200 mt-1">{aggregateStats.billableHours.toFixed(0)}h billable</p>
             </div>
-            <div className="bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl p-6">
-              <h3 className="text-sm font-medium text-purple-100 mb-1">Notes Quality</h3>
+            <div className="bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl p-6">
+              <h3 className="text-sm font-medium text-blue-100 mb-1">Notes Quality</h3>
               <p className="text-4xl font-bold text-white">{aggregateStats.notesPercent.toFixed(0)}%</p>
-              <p className="text-sm text-purple-200 mt-1">Entries with notes</p>
+              <p className="text-sm text-blue-200 mt-1">Entries with notes</p>
             </div>
             <div className="bg-gradient-to-br from-orange-600 to-orange-700 rounded-xl p-6">
               <h3 className="text-sm font-medium text-orange-100 mb-1">Time Entries</h3>
@@ -294,8 +294,8 @@ export default function TimeTracking() {
                           <div className="h-2 bg-gray-600 rounded-full overflow-hidden">
                             <div 
                               className={`h-full rounded-full ${
-                                engineer.notesPercent >= 80 ? 'bg-purple-500' :
-                                engineer.notesPercent >= 50 ? 'bg-purple-400' : 'bg-purple-300'
+                                engineer.notesPercent >= 80 ? 'bg-blue-500' :
+                                engineer.notesPercent >= 50 ? 'bg-blue-400' : 'bg-blue-300'
                               }`}
                               style={{ width: `${engineer.notesPercent}%` }}
                             />
@@ -324,7 +324,7 @@ export default function TimeTracking() {
           <div className="bg-gray-800 rounded-lg p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-semibold text-white">
-                🤖 AI Performance Insights
+                AI Performance Insights
               </h3>
               <button
                 onClick={generateAIAnalysis}
@@ -332,15 +332,16 @@ export default function TimeTracking() {
                 className={`px-5 py-2.5 rounded-lg font-medium transition-all ${
                   isGeneratingAnalysis || engineerAnalytics.length === 0
                     ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white shadow-lg hover:shadow-xl'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
                 }`}
               >
                 {isGeneratingAnalysis ? (
                   <span className="flex items-center gap-2">
-                    <span className="animate-spin">⏳</span> Analyzing...
+                    <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+                    Analyzing...
                   </span>
                 ) : (
-                  '✨ Generate AI Analysis'
+                  'Generate AI Analysis'
                 )}
               </button>
             </div>

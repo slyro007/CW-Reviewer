@@ -54,6 +54,7 @@ export interface Ticket {
   company?: string // Client/company name
   estimatedHours?: number
   actualHours?: number
+  resources?: string // Team members/resources (comma-separated identifiers)
 }
 
 // Board types

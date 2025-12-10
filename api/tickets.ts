@@ -47,6 +47,14 @@ export default async function handler(
       closedFlag: t.closedFlag || false,
       dateEntered: t.dateEntered,
       resolvedDate: t.resolvedDate || t.actualHours,
+      owner: t.owner?.identifier || undefined,
+      company: t.company?.name || undefined,
+      type: t.type?.name || undefined,
+      priority: t.priority?.name || undefined,
+      estimatedHours: t.estimatedHours || undefined,
+      actualHours: t.actualHours || undefined,
+      // Team members - can be an array or single object
+      teamMember: t.teamMember?.identifier || (Array.isArray(t.team) ? t.team.map((tm: any) => tm.identifier || tm.member?.identifier).filter(Boolean).join(',') : undefined) || undefined,
     }))
 
     res.status(200).json(transformed)

@@ -251,9 +251,9 @@ export default function Export() {
             <label className="block text-sm font-medium text-gray-300 mb-2">Export Format</label>
             <div className="grid grid-cols-3 gap-2">
               {[
-                { value: 'csv', label: 'CSV', icon: '📊' },
-                { value: 'pdf', label: 'PDF', icon: '📄' },
-                { value: 'ai-summary', label: 'AI Summary', icon: '🤖' },
+                { value: 'csv', label: 'CSV' },
+                { value: 'pdf', label: 'PDF' },
+                { value: 'ai-summary', label: 'AI Summary' },
               ].map(format => (
                 <button
                   key={format.value}
@@ -264,8 +264,7 @@ export default function Export() {
                       : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                   }`}
                 >
-                  <span className="text-2xl block mb-1">{format.icon}</span>
-                  <span className="text-sm">{format.label}</span>
+                  <span className="text-sm font-medium">{format.label}</span>
                 </button>
               ))}
             </div>
@@ -305,7 +304,8 @@ export default function Export() {
           >
             {isExporting ? (
               <span className="flex items-center justify-center gap-2">
-                <span className="animate-spin">⏳</span> Generating...
+                <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
+                Generating...
               </span>
             ) : filteredEntries.length === 0 ? (
               'No data to export'
@@ -385,7 +385,7 @@ export default function Export() {
       {/* AI Summary Result */}
       {aiSummary && (
         <div className="mt-6 bg-gray-800 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">🤖 AI-Generated Summary</h3>
+          <h3 className="text-lg font-semibold text-white mb-4">AI-Generated Summary</h3>
           <div className="bg-gray-700 rounded-lg p-6">
             <div className="whitespace-pre-wrap text-gray-200 leading-relaxed">
               {aiSummary}

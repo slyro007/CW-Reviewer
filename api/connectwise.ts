@@ -340,8 +340,8 @@ class ConnectWiseClient {
       ...options,
       conditions: conditions || undefined,
       orderBy: 'dateEntered desc',
-      // Include additional fields for project analysis: type, priority, owner, company
-      fields: options.fields || 'id,summary,board/id,status/name,closedDate,closedFlag,dateEntered,resolvedDate,type/name,priority/name,owner/identifier,company/name,estimatedHours,actualHours',
+      // Include additional fields: type, priority, owner, company, team members
+      fields: options.fields || 'id,summary,board/id,status/name,closedDate,closedFlag,dateEntered,resolvedDate,type/name,priority/name,owner/identifier,company/name,estimatedHours,actualHours,team/id,teamMember/identifier',
     })
   }
 

@@ -24,14 +24,14 @@ export default function EngineerSelector() {
 
   return (
     <div className="mb-6">
-      <label className="block text-sm font-medium text-blue-300 mb-2">
+      <label className="block text-sm font-medium text-gray-300 mb-2">
         Select Engineer
       </label>
       <select
         value={selectedEngineerId === null ? 'all' : selectedEngineerId.toString()}
         onChange={handleChange}
         disabled={isLoading}
-        className="w-full bg-purple-800 text-white rounded px-3 py-2 border border-purple-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+        className="w-full bg-gray-800 text-white rounded px-3 py-2 border border-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <option value="all">All Engineers</option>
         {isLoading ? (
