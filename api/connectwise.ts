@@ -18,22 +18,59 @@ interface RequestOptions {
   pageSize?: number
   conditions?: string
   orderBy?: string
+  fields?: string // For partial field responses to reduce payload size
 }
 
 class ConnectWiseClient {
   private config: ConnectWiseConfig
+  private codebase: string | null = null
 
   constructor(config: ConnectWiseConfig) {
     this.config = config
+  }
+
+  private async getCodebase(): Promise<string> {
+    // For cloud environments, we need to detect the codebase dynamically
+    // According to docs: https://ConnectWiseSite/login/companyinfo/CompanyId
+    try {
+      // Handle both api-na.myconnectwise.net and na.myconnectwise.net formats
+      let siteUrl = this.config.baseUrl.replace('https://', '')
+      
+      // If baseUrl contains 'api-', remove it for companyinfo endpoint
+      // Otherwise, use as-is (for on-premise or direct URLs)
+      if (siteUrl.startsWith('api-')) {
+        siteUrl = siteUrl.replace('api-', '')
+      }
+      
+      const companyInfoUrl = `https://${siteUrl}/login/companyinfo/${this.config.companyId}`
+      
+      const response = await fetch(companyInfoUrl)
+      if (response.ok) {
+        const info = await response.json()
+        // Cloud returns versioned codebase like "v2017_3/", on-premise returns "v4_6_release/"
+        // Ensure it ends with / for proper URL construction
+        const codebase = info.Codebase || 'v4_6_release/'
+        return codebase.endsWith('/') ? codebase : `${codebase}/`
+      }
+    } catch (error) {
+      // If we can't determine, default to v4_6_release
+      console.warn('Could not determine codebase, using default:', error)
+    }
+    return 'v4_6_release/'
   }
 
   private async request<T>(
     endpoint: string,
     options: RequestOptions = {}
   ): Promise<T> {
-    const { page = 1, pageSize = 1000, conditions, orderBy } = options
+    const { page = 1, pageSize = 1000, conditions, orderBy, fields } = options
     
-    const url = new URL(`${this.config.baseUrl}/v4_6_release/apis/3.0${endpoint}`)
+    // Get the correct codebase (cache it to avoid repeated calls)
+    if (!this.codebase) {
+      this.codebase = await this.getCodebase()
+    }
+    
+    const url = new URL(`${this.config.baseUrl}/${this.codebase}apis/3.0${endpoint}`)
     url.searchParams.append('page', page.toString())
     url.searchParams.append('pageSize', pageSize.toString())
     if (conditions) {
@@ -42,6 +79,9 @@ class ConnectWiseClient {
     if (orderBy) {
       url.searchParams.append('orderBy', orderBy)
     }
+    if (fields) {
+      url.searchParams.append('fields', fields)
+    }
 
     // Create base64 auth string (works in both Node.js and serverless)
     const authString = `${this.config.companyId}+${this.config.publicKey}:${this.config.privateKey}`
@@ -49,17 +89,21 @@ class ConnectWiseClient {
       ? Buffer.from(authString).toString('base64')
       : btoa(authString)
 
+    // Accept header: Use application/vnd.connectwise.com+json without version parameter
+    // The version is handled via the codebase in the URL path
     const response = await fetch(url.toString(), {
       method: 'GET',
       headers: {
         'Authorization': `Basic ${auth}`,
+        'Accept': 'application/vnd.connectwise.com+json',
         'Content-Type': 'application/json',
         'clientId': this.config.clientId,
       },
     })
 
     if (!response.ok) {
-      throw new Error(`ConnectWise API error: ${response.statusText}`)
+      const errorText = await response.text().catch(() => response.statusText)
+      throw new Error(`ConnectWise API error: ${response.status} ${errorText}`)
     }
 
     return response.json()
@@ -75,6 +119,7 @@ class ConnectWiseClient {
       conditions: options.conditions 
         ? `${conditions} AND ${options.conditions}`
         : conditions,
+      fields: options.fields || 'id,identifier,firstName,lastName,emailAddress,inactiveFlag',
     })
   }
 
@@ -112,6 +157,7 @@ class ConnectWiseClient {
       ...options,
       conditions: conditions || undefined,
       orderBy: 'dateStart desc',
+      fields: options.fields || 'id,member/id,ticket/id,hours,actualHours,billableOption,notes,internalNotes,dateStart,dateEnd,timeStart,timeEnd',
     })
   }
 
@@ -148,16 +194,21 @@ class ConnectWiseClient {
       ...options,
       conditions: conditions || undefined,
       orderBy: 'dateEntered desc',
+      fields: options.fields || 'id,summary,board/id,status/name,closedDate,closedFlag,dateEntered,resolvedDate',
     })
   }
 
   /**
    * Fetch boards - MS and PS board IDs only
    */
-  async getBoards(type?: 'MS' | 'PS'): Promise<any[]> {
+  async getBoards(type?: 'MS' | 'PS', options: RequestOptions = {}): Promise<any[]> {
     const conditions = type ? `name LIKE '%${type}%'` : undefined
     return this.request<any[]>('/service/boards', {
-      conditions,
+      ...options,
+      conditions: options.conditions 
+        ? (conditions ? `${conditions} AND ${options.conditions}` : options.conditions)
+        : conditions,
+      fields: options.fields || 'id,name',
     })
   }
 }

@@ -4,9 +4,9 @@ import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
 import { useUIStore } from '@/stores/uiStore'
 
 export default function Dashboard() {
-  const { members, isLoading: membersLoading, setMembers } = useMembersStore()
-  const { entries, isLoading: entriesLoading, setEntries, setDateRange } = useTimeEntriesStore()
-  const { filters, setDateRange: setUIDateRange } = useUIStore()
+  const { members, isLoading: membersLoading } = useMembersStore()
+  const { entries, isLoading: entriesLoading, setDateRange } = useTimeEntriesStore()
+  const { setDateRange: setUIDateRange } = useUIStore()
   const [selectedDateRange, setSelectedDateRange] = useState<{ start: string; end: string }>({
     start: '',
     end: '',
