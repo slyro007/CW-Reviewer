@@ -129,7 +129,16 @@ export default function Compare() {
       const avgResolutionTime = resolutionTimes.length > 0 ? resolutionTimes.reduce((a, b) => a + b, 0) / resolutionTimes.length : 0
 
       const memberTimeEntryProjectIds = new Set(memberEntries.filter(e => e.projectId).map(e => e.projectId!))
-      const memberProjects = projects.filter(p => p.managerIdentifier?.toLowerCase() === identifier || memberTimeEntryProjectIds.has(p.id))
+      const memberProjectResourceIds = new Set(
+        filteredProjectTickets
+          .filter(t => t.resources?.toLowerCase().includes(identifier))
+          .map(t => t.projectId)
+      )
+      const memberProjects = projects.filter(p =>
+        p.managerIdentifier?.toLowerCase() === identifier ||
+        memberTimeEntryProjectIds.has(p.id) ||
+        memberProjectResourceIds.has(p.id)
+      )
       const memberProjectIds = memberProjects.map(p => p.id)
       const memberProjectTickets = filteredProjectTickets.filter(t => memberProjectIds.includes(t.projectId) || t.resources?.toLowerCase().includes(identifier))
       const closedProjectTickets = memberProjectTickets.filter(t => t.closedFlag)

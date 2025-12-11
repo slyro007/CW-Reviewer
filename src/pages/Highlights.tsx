@@ -118,9 +118,18 @@ export default function Highlights() {
           .filter(e => e.memberId === selectedEngineer.id && e.projectId !== null && e.projectId !== undefined)
           .map(e => e.projectId!)
       )
+
+      // Get project IDs where engineer is a resource
+      const resourceProjectIds = new Set(
+        projectTickets
+          .filter(t => t.resources?.toLowerCase().includes(identifier))
+          .map(t => t.projectId)
+      )
+
       return projects.filter(p =>
         p.managerIdentifier?.toLowerCase() === identifier ||
-        timeEntryProjectIds.has(p.id)
+        timeEntryProjectIds.has(p.id) ||
+        resourceProjectIds.has(p.id)
       )
     } else if (selectedTeam !== 'All Company') {
       const teamIdentifiers = TEAM_DEFINITIONS[selectedTeam] || []

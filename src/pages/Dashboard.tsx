@@ -168,11 +168,25 @@ export default function Dashboard() {
         if (!isManagerInTeam && !hasTeamEntry && !hasTeamTicket) return false
       }
 
-      // Engineer Filter (Manager)
+      // Engineer Filter (Manager OR Resource OR Time Entry)
       if (selectedEngineerId) {
         const member = members.find(m => m.id === selectedEngineerId)
-        if (member && p.managerIdentifier?.toLowerCase() !== member.identifier.toLowerCase()) {
-          return false
+        if (member) {
+          const isManager = p.managerIdentifier?.toLowerCase() === member.identifier.toLowerCase()
+
+          // Check time entries
+          const hasEntry = entries.some(e =>
+            e.projectId === p.id &&
+            e.memberId === selectedEngineerId
+          )
+
+          // Check tickets
+          const hasTicket = projectTickets.some(t =>
+            t.projectId === p.id &&
+            t.resources?.toLowerCase().includes(member.identifier.toLowerCase())
+          )
+
+          if (!isManager && !hasEntry && !hasTicket) return false
         }
       }
       return true
