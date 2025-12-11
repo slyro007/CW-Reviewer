@@ -14,8 +14,12 @@ import {
   ALLOWED_ENGINEER_IDENTIFIERS,
   SERVICE_BOARD_NAMES,
   SYNC_STALE_THRESHOLD_MS,
-  SYNC_INCREMENTAL_FALLBACK
+  SYNC_INCREMENTAL_FALLBACK,
+  BOARD_CACHE_TTL_MS,
+  MEMBER_CACHE_TTL_MS,
+  ENABLE_FOUNDATIONAL_CACHE
 } from '../api/config.js'
+import crypto from 'crypto'
 
 const prisma = new PrismaClient()
 
@@ -30,6 +34,67 @@ interface SyncResult {
 function log(message: string, data?: any) {
   const timestamp = new Date().toISOString()
   console.log(`[${timestamp}] [Build Sync] ${message}`, data || '')
+}
+
+// Helper function to generate checksum for cache validation
+function generateChecksum(data: any): string {
+  return crypto.createHash('md5').update(JSON.stringify(data)).digest('hex')
+}
+
+// Helper function to check if cached data is still valid
+async function isCacheValid(entityType: string, ttlMs: number): Promise<boolean> {
+  if (!ENABLE_FOUNDATIONAL_CACHE) {
+    log(`   ⚠️  Cache disabled via config, will fetch fresh data`)
+    return false
+  }
+
+  const now = new Date()
+  const cacheEntries = await prisma.entityCache.findMany({
+    where: {
+      entityType,
+      expiresAt: { gt: now }
+    }
+  })
+
+  if (cacheEntries.length === 0) {
+    log(`   ℹ️  No valid cache found for ${entityType}`)
+    return false
+  }
+
+  log(`   ✅ Found ${cacheEntries.length} valid cached ${entityType} entries`)
+  return true
+}
+
+// Helper function to update cache for an entity
+async function updateEntityCache(
+  entityType: string,
+  entityId: number,
+  ttlMs: number,
+  metadata?: any
+): Promise<void> {
+  const now = new Date()
+  const expiresAt = new Date(now.getTime() + ttlMs)
+  const checksum = metadata ? generateChecksum(metadata) : null
+
+  await prisma.entityCache.upsert({
+    where: {
+      entityType_entityId: { entityType, entityId }
+    },
+    create: {
+      entityType,
+      entityId,
+      lastFetchedAt: now,
+      expiresAt,
+      metadata,
+      checksum
+    },
+    update: {
+      lastFetchedAt: now,
+      expiresAt,
+      metadata,
+      checksum
+    }
+  })
 }
 
 async function performBuildSync() {
@@ -105,14 +170,19 @@ async function performBuildSync() {
             const memberResult = await syncMembers(client)
             count = memberResult.count
             allowedMemberIds = memberResult.memberIds
-            message = `Full sync: ${count} engineers`
-            log(`   ✅ Synced ${count} members`)
+            message = memberResult.cached
+              ? `Using cache: ${count} engineers`
+              : `Fresh sync: ${count} engineers`
+            log(`   ✅ ${message}`)
             break
           case 'boards':
             log(`   Fetching boards from ConnectWise...`)
-            count = await syncBoards(client)
-            message = `Full sync: ${count} boards`
-            log(`   ✅ Synced ${count} boards`)
+            const boardResult = await syncBoards(client)
+            count = boardResult.count
+            message = boardResult.cached
+              ? `Using cache: ${count} boards`
+              : `Fresh sync: ${count} boards`
+            log(`   ✅ ${message}`)
             break
           case 'tickets':
             if (allowedMemberIds.length === 0) {
@@ -176,10 +246,32 @@ async function performBuildSync() {
         const existingCount = syncLogEntry?.recordCount || 0
         const newTotalCount = usedIncremental ? existingCount : count
 
+        // Calculate cache metrics for foundational entities
+        const isCachedEntity = ['members', 'boards'].includes(entityType)
+        const cachedCount = isCachedEntity && message.includes('Using cache') ? count : 0
+        const freshCount = isCachedEntity && !message.includes('Using cache') ? count : (usedIncremental ? count : 0)
+        const hitRate = isCachedEntity && count > 0 ? (cachedCount / count) * 100 : null
+
         await prisma.syncLog.upsert({
           where: { entityType },
-          create: { entityType, lastSyncAt: now, recordCount: newTotalCount, status: 'success' },
-          update: { lastSyncAt: now, recordCount: newTotalCount, status: 'success', errorMessage: null }
+          create: {
+            entityType,
+            lastSyncAt: now,
+            recordCount: newTotalCount,
+            cachedRecordCount: cachedCount,
+            freshRecordCount: freshCount,
+            cacheHitRate: hitRate,
+            status: 'success'
+          },
+          update: {
+            lastSyncAt: now,
+            recordCount: newTotalCount,
+            cachedRecordCount: cachedCount,
+            freshRecordCount: freshCount,
+            cacheHitRate: hitRate,
+            status: 'success',
+            errorMessage: null
+          }
         })
 
         results.push({ entity: entityType, synced: true, count, message })
@@ -220,7 +312,20 @@ async function performBuildSync() {
 }
 
 // Import sync functions from sync.ts (we'll need to extract them)
-async function syncMembers(client: any): Promise<{ count: number; memberIds: number[] }> {
+async function syncMembers(client: any): Promise<{ count: number; memberIds: number[]; cached: boolean }> {
+  // Check if we have valid cached member data
+  const cacheValid = await isCacheValid('member', MEMBER_CACHE_TTL_MS)
+
+  if (cacheValid) {
+    // Use cached data - just return existing members from DB
+    const cachedMembers = await prisma.member.findMany()
+    const memberIds = cachedMembers.map(m => m.id)
+    log(`   ✅ Using ${cachedMembers.length} cached members (no API call needed)`)
+    return { count: cachedMembers.length, memberIds, cached: true }
+  }
+
+  // Cache miss or expired - fetch fresh data from API
+  log(`   🔄 Fetching fresh member data from ConnectWise API...`)
   const allMembers = await client.getMembers()
   const allowedMembers = allMembers.filter((m: any) =>
     ALLOWED_ENGINEER_IDENTIFIERS.includes(m.identifier?.toLowerCase())
@@ -247,11 +352,32 @@ async function syncMembers(client: any): Promise<{ count: number; memberIds: num
         inactiveFlag: member.inactiveFlag || false,
       }
     })
+
+    // Update cache for this member
+    await updateEntityCache('member', member.id, MEMBER_CACHE_TTL_MS, {
+      identifier: member.identifier,
+      firstName: member.firstName,
+      lastName: member.lastName
+    })
   }
-  return { count: allowedMembers.length, memberIds }
+
+  log(`   ✅ Cached ${allowedMembers.length} members for ${MEMBER_CACHE_TTL_MS / (24 * 60 * 60 * 1000)} days`)
+  return { count: allowedMembers.length, memberIds, cached: false }
 }
 
-async function syncBoards(client: any): Promise<number> {
+async function syncBoards(client: any): Promise<{ count: number; cached: boolean }> {
+  // Check if we have valid cached board data
+  const cacheValid = await isCacheValid('board', BOARD_CACHE_TTL_MS)
+
+  if (cacheValid) {
+    // Use cached data - just return existing boards from DB
+    const cachedBoards = await prisma.board.findMany()
+    log(`   ✅ Using ${cachedBoards.length} cached boards (no API call needed)`)
+    return { count: cachedBoards.length, cached: true }
+  }
+
+  // Cache miss or expired - fetch fresh data from API
+  log(`   🔄 Fetching fresh board data from ConnectWise API...`)
   const boards = await client.getBoards()
   for (const board of boards) {
     const type = board.name?.includes('MS') ? 'MS' : 'PS'
@@ -260,6 +386,13 @@ async function syncBoards(client: any): Promise<number> {
       create: { id: board.id, name: board.name, type },
       update: { name: board.name, type }
     })
+
+    // Update cache for this board
+    await updateEntityCache('board', board.id, BOARD_CACHE_TTL_MS, {
+      name: board.name,
+      type
+    })
+
     if (SERVICE_BOARD_NAMES.some(name =>
       board.name?.toLowerCase().includes(name.toLowerCase().replace('(ms)', '').replace('(ts)', '').trim()) ||
       name.toLowerCase().includes(board.name?.toLowerCase())
@@ -271,7 +404,9 @@ async function syncBoards(client: any): Promise<number> {
       })
     }
   }
-  return boards.length
+
+  log(`   ✅ Cached ${boards.length} boards for ${BOARD_CACHE_TTL_MS / (24 * 60 * 60 * 1000)} days`)
+  return { count: boards.length, cached: false }
 }
 
 async function syncTickets(client: any, allowedMemberIds: number[], modifiedSince?: Date): Promise<number> {

@@ -34,3 +34,10 @@ export const SYNC_INCREMENTAL_FALLBACK = false // DISABLED - do not fall back to
 // Maximum sync frequency - prevent accidental over-syncing
 export const MINIMUM_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000 // 6 hours minimum between syncs
 
+// Cache TTL for foundational/structural data - rarely changes
+export const BOARD_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days - boards rarely change
+export const MEMBER_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days - engineer list is stable
+
+// Enable/disable foundational data caching
+export const ENABLE_FOUNDATIONAL_CACHE = true // Set to false to always fetch boards/members
+

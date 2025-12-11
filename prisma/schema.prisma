@@ -179,17 +179,37 @@ model ProjectTicket {
 }
 
 model SyncLog {
-  id            String   @id @default(cuid())
-  entityType    String   @unique // "members", "boards", "tickets", "timeEntries", "projects", "projectTickets"
-  lastSyncAt    DateTime
-  recordCount   Int      @default(0)
-  status        String   @default("success") // "success", "failed", "in_progress"
-  errorMessage  String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                String   @id @default(cuid())
+  entityType        String   @unique // "members", "boards", "tickets", "timeEntries", "projects", "projectTickets"
+  lastSyncAt        DateTime
+  recordCount       Int      @default(0)
+  cachedRecordCount Int      @default(0)  // Number of records served from cache
+  freshRecordCount  Int      @default(0)  // Number of records fetched fresh from API
+  cacheHitRate      Float?                // Percentage of records served from cache
+  status            String   @default("success") // "success", "failed", "in_progress"
+  errorMessage      String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@index([entityType])
   @@index([lastSyncAt])
+}
+
+model EntityCache {
+  id             String   @id @default(cuid())
+  entityType     String   // "board", "member", "serviceBoard"
+  entityId       Int      // The ID of the cached entity
+  lastFetchedAt  DateTime // When this entity was last fetched from ConnectWise API
+  expiresAt      DateTime // When this cache entry expires
+  metadata       Json?    // Additional metadata about the entity
+  checksum       String?  // Hash of the entity data for change detection
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([entityType, entityId])
+  @@index([entityType])
+  @@index([expiresAt])
+  @@index([lastFetchedAt])
 }
 
 model AnalysisCache {
