@@ -17,6 +17,14 @@ interface Achievement {
   source: 'time' | 'serviceDesk' | 'projects'
 }
 
+interface AIWrappedResult {
+  title: string
+  opening: string
+  topAchievements: Array<{ emoji: string; text: string }>
+  funStats: Array<{ label: string; value: string; comment: string }>
+  closing: string
+}
+
 export default function Highlights() {
   const { selectedEngineerId } = useSelectedEngineerStore()
   const { members } = useMembersStore()
@@ -24,11 +32,12 @@ export default function Highlights() {
   const { serviceTickets, fetchServiceBoardTickets } = useTicketsStore()
   const { projects, projectTickets, fetchProjects, fetchProjectTickets } = useProjectsStore()
   const { getDateRange, getPeriodLabel } = useTimePeriodStore()
-  
+
   const { dataSources, setDataSources, includesServiceDesk, includesProjects } = useDataSources()
   const [isGeneratingHighlights, setIsGeneratingHighlights] = useState(false)
   const [aiHighlights, setAiHighlights] = useState<string | null>(null)
   const [highlightError, setHighlightError] = useState<string | null>(null)
+  const [parsedWrapped, setParsedWrapped] = useState<AIWrappedResult | null>(null)
 
   const dateRange = getDateRange()
   const periodLabel = getPeriodLabel()
@@ -86,7 +95,7 @@ export default function Highlights() {
           .filter(e => e.memberId === selectedEngineer.id && e.projectId !== null && e.projectId !== undefined)
           .map(e => e.projectId!)
       )
-      return projects.filter(p => 
+      return projects.filter(p =>
         p.managerIdentifier?.toLowerCase() === identifier ||
         timeEntryProjectIds.has(p.id)
       )
@@ -111,7 +120,7 @@ export default function Highlights() {
   // Calculate achievements
   const achievements = useMemo((): Achievement[] => {
     const achievements: Achievement[] = []
-    
+
     // Time entry achievements
     const totalHours = filteredEntries.reduce((sum, e) => sum + e.hours, 0)
     const billableHours = filteredEntries.filter(e => e.billableOption === 'Billable').reduce((sum, e) => sum + e.hours, 0)
@@ -181,13 +190,24 @@ export default function Highlights() {
   const generateAIHighlights = async () => {
     setIsGeneratingHighlights(true)
     setHighlightError(null)
+    setParsedWrapped(null)
     try {
+      // Pass json: true to enable structured output
       const response = await api.generateAnalysis('cwWrapped', {
         member: selectedEngineer || { firstName: 'Team', lastName: '' },
         stats: { ...funStats, achievements: achievements.map(a => `${a.title}: ${a.value}`), dataSources },
         year: new Date().getFullYear(),
-      })
+      }, { json: true, model: 'gpt-3.5-turbo-1106' })
+
       setAiHighlights(response.analysis)
+
+      try {
+        const parsed = JSON.parse(response.analysis)
+        setParsedWrapped(parsed)
+      } catch (e) {
+        console.warn('Failed to parse AI output', e)
+      }
+
     } catch (error: any) {
       setHighlightError(error.message || 'Failed to generate highlights')
     } finally {
@@ -290,8 +310,8 @@ export default function Highlights() {
                 </div>
               )
             })()}
-            
-            {/* Best Service (if service desk enabled) */}
+
+            {/* Best Service */}
             {includesServiceDesk && (() => {
               const memberTickets = members.map(m => {
                 const id = m.identifier.toLowerCase()
@@ -308,8 +328,8 @@ export default function Highlights() {
                 </div>
               )
             })()}
-            
-            {/* Best Projects (if projects enabled) */}
+
+            {/* Best Projects */}
             {includesProjects && (() => {
               const memberProjects = members.map(m => ({
                 ...m,
@@ -329,23 +349,84 @@ export default function Highlights() {
         </div>
       )}
 
-      {/* AI Generated Highlights */}
-      <div className="bg-gray-800 rounded-lg p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold text-white">AI-Powered Summary</h3>
+      {/* AI Generated Highlights Wrapper */}
+      <div className="bg-gray-900 rounded-2xl border border-gray-800 p-8 overflow-hidden relative">
+        <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+          <svg className="w-64 h-64 text-white" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" /></svg>
+        </div>
+
+        <div className="flex justify-between items-center mb-8 relative z-10">
+          <div>
+            <h3 className="text-2xl font-bold text-white bg-clip-text text-transparent bg-gradient-to-r from-pink-500 to-violet-500">
+              {parsedWrapped ? parsedWrapped.title : 'AI Wrapped Experience'}
+            </h3>
+            <p className="text-gray-400">Generate a custom end-of-period review</p>
+          </div>
           <button onClick={generateAIHighlights} disabled={isGeneratingHighlights}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${isGeneratingHighlights ? 'bg-gray-600 text-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}>
-            {isGeneratingHighlights ? <span className="flex items-center gap-2"><span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>Creating...</span> : 'Generate Summary'}
+            className={`px-6 py-3 rounded-full font-bold transition-all transform active:scale-95 shadow-lg ${isGeneratingHighlights ? 'bg-gray-700 text-gray-500' : 'bg-gradient-to-r from-pink-600 to-purple-600 text-white hover:from-pink-500 hover:to-purple-500 hover:shadow-pink-500/25'}`}>
+            {isGeneratingHighlights ? 'Generating Magic...' : '✨ Generate Wrapped'}
           </button>
         </div>
-        {highlightError && <div className="bg-red-600/20 border border-red-500 rounded-lg p-4 mb-4"><p className="text-red-400">{highlightError}</p></div>}
-        {aiHighlights ? (
-          <div className="bg-gradient-to-br from-gray-700 to-gray-800 rounded-lg p-6">
-            <div className="whitespace-pre-wrap text-gray-200 leading-relaxed text-lg">{aiHighlights}</div>
+
+        {highlightError && <div className="bg-red-500/20 text-red-200 p-4 rounded-lg mb-4">{highlightError}</div>}
+
+        {parsedWrapped ? (
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+
+            {/* Opening */}
+            <div className="bg-gray-800/80 p-6 rounded-2xl border border-gray-700/50 backdrop-blur-sm">
+              <p className="text-xl text-gray-200 italic font-light leading-relaxed">
+                "{parsedWrapped.opening}"
+              </p>
+            </div>
+
+            {/* Top Achievements Horizontal Scroll */}
+            <div>
+              <h4 className="text-lg font-bold text-gray-400 mb-4 uppercase tracking-wider text-xs">Top Moments</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {parsedWrapped.topAchievements.map((ach, i) => (
+                  <div key={i} className="bg-gray-800 p-6 rounded-xl border-2 border-gray-700 hover:border-pink-500/50 transition-colors flex items-center gap-4">
+                    <span className="text-4xl">{ach.emoji}</span>
+                    <span className="text-gray-200 font-medium">{ach.text}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Fun Stats Grid */}
+            <div>
+              <h4 className="text-lg font-bold text-gray-400 mb-4 uppercase tracking-wider text-xs">The Breakdown</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {parsedWrapped.funStats.map((stat, i) => (
+                  <div key={i} className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-xl text-center relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent"></div>
+                    <p className="text-pink-400 text-xs font-bold uppercase mb-2 relative z-10">{stat.label}</p>
+                    <p className="text-3xl font-black text-white mb-2 relative z-10">{stat.value}</p>
+                    <p className="text-gray-400 text-sm italic relative z-10">"{stat.comment}"</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Closing */}
+            <div className="text-center p-8 bg-gradient-to-r from-pink-900/20 to-purple-900/20 rounded-2xl">
+              <p className="text-2xl font-bold text-white mb-2">🎉</p>
+              <p className="text-lg text-gray-300">{parsedWrapped.closing}</p>
+            </div>
+
+          </div>
+        ) : aiHighlights ? (
+          /* Fallback for raw text */
+          <div className="bg-gray-800 p-8 rounded-xl whitespace-pre-wrap text-gray-300 font-mono text-sm leading-relaxed border-l-4 border-pink-500">
+            {aiHighlights}
           </div>
         ) : (
-          <p className="text-gray-400">Click the button to generate a personalized AI summary of your achievements!</p>
+          <div className="text-center py-12 border-2 border-dashed border-gray-700/50 rounded-2xl">
+            <span className="text-6xl mb-4 block grayscale opacity-30">🎁</span>
+            <p className="text-gray-500">Tap "Generate Wrapped" to unwrap your year in review.</p>
+          </div>
         )}
+
       </div>
     </div>
   )

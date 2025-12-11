@@ -43,7 +43,7 @@ const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
       // Handle both Date objects and ISO strings (from JSON serialization)
       const startDate = data.period.start instanceof Date ? data.period.start : new Date(data.period.start)
       const endDate = data.period.end instanceof Date ? data.period.end : new Date(data.period.end)
-      
+
       return `Create a quarterly summary for engineer ${data.member.firstName} ${data.member.lastName}
       for the period ${startDate.toISOString()} to ${endDate.toISOString()}.
       
@@ -61,40 +61,78 @@ const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
   cwWrapped: {
     name: 'cwWrapped',
     systemPrompt: `You are creating a fun, engaging annual summary similar to Spotify Wrapped.
-    Make it visually appealing with emojis and celebrate the engineer's achievements.`,
+    Make it visually appealing with emojis and celebrate the engineer's achievements.
+    
+    IMPORTANT: You must respond in valid JSON format matching this schema:
+    {
+      "title": "string (e.g., '2024 Unwrapped' or 'Q4 Review')",
+      "opening": "string (Energetic intro paragraph)",
+      "topAchievements": [
+        { "emoji": "string", "text": "string (Short punchy achievement)" }
+      ],
+      "funStats": [
+        { "label": "string", "value": "string", "comment": "string (Witty remark)" }
+      ],
+      "closing": "string (Motivational outro)"
+    }`,
     userPrompt: (data: { member: any; stats: any; year: number }) => {
-      return `Create a CW Wrapped summary for ${data.member.firstName} ${data.member.lastName} for ${data.year}:
+      return `Create a CW Wrapped summary for ${data.member.firstName} ${data.member.lastName} for ${data.year}.
       
+      Stats:
       ${JSON.stringify(data.stats, null, 2)}
       
-      Make it fun, engaging, and celebratory!`
+      Return valid JSON.`
     },
   },
   mspStandardsReview: {
     name: 'mspStandardsReview',
     systemPrompt: `You are an expert at reviewing MSP engineer performance against industry standards.
     Evaluate time tracking, notes quality, billability, and productivity.
-    Provide scores (0-100) and detailed recommendations.`,
+    
+    IMPORTANT: You must respond in valid JSON format matching this schema:
+    {
+      "summary": "markdown string",
+      "scores": {
+        "timeTracking": number (0-100),
+        "notesQuality": number (0-100),
+        "billability": number (0-100),
+        "productivity": number (0-100),
+        "overall": number (0-100)
+      },
+      "strengths": ["string"],
+      "weaknesses": ["string"],
+      "recommendations": ["string"],
+      "actionPlan": [
+        { "step": "string", "priority": "High|Medium|Low" }
+      ]
+    }`,
     userPrompt: (data: { member: any; entries: any[]; tickets: any[]; period: { start: Date | string; end: Date | string } }) => {
       // Handle both Date objects and ISO strings (from JSON serialization)
       const startDate = data.period.start instanceof Date ? data.period.start : new Date(data.period.start)
       const endDate = data.period.end instanceof Date ? data.period.end : new Date(data.period.end)
-      
+
       return `Review engineer ${data.member.firstName} ${data.member.lastName} against MSP standards
       for the period ${startDate.toISOString()} to ${endDate.toISOString()}.
       
-      Provide scores and recommendations for:
-      1. Time Tracking Quality
-      2. Notes Quality
-      3. Billability
-      4. Productivity
-      5. Overall Performance`
+      Time Entries: ${data.entries.length}
+      Tickets Worked: ${data.tickets.length}
+      
+      Return valid JSON.`
     },
   },
   engineerComparison: {
     name: 'engineerComparison',
     systemPrompt: `You are an expert at comparing multiple engineers' performance.
-    Provide objective, fair comparisons highlighting strengths and differences.`,
+    Provide objective, fair comparisons highlighting strengths and differences.
+    
+    IMPORTANT: You must respond in valid JSON format matching this schema:
+    {
+      "summary": "markdown string (Executive summary of the comparison)",
+      "comparisonPoints": [
+        { "category": "string (e.g. Activity, Efficiency, Quality)", "observation": "string", "advantage": "string (Name of engineer with advantage, or 'Neutral')" }
+      ],
+      "recommendations": ["string"]
+    }`,
     userPrompt: (data: { members: any[]; comparisonData: any }) => {
       return `Compare the following engineers:
       
@@ -103,7 +141,7 @@ const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
       Comparison Data:
       ${JSON.stringify(data.comparisonData, null, 2)}
       
-      Provide insights on similarities, differences, and recommendations.`
+      Return valid JSON.`
     },
   },
   engineerAnalysis: {
@@ -128,14 +166,27 @@ class OpenAIClient {
   async generateAnalysis(
     templateName: string,
     data: any,
-    options: { model?: string; temperature?: number } = {}
+    options: { model?: string; temperature?: number; json?: boolean } = {}
   ): Promise<string> {
     const template = PROMPT_TEMPLATES[templateName]
     if (!template) {
       throw new Error(`Template ${templateName} not found`)
     }
 
-    const { model = 'gpt-3.5-turbo', temperature = 0.7 } = options
+    const { model = 'gpt-3.5-turbo-1106', temperature = 0.7, json = false } = options
+
+    const body: any = {
+      model,
+      messages: [
+        { role: 'system', content: template.systemPrompt },
+        { role: 'user', content: template.userPrompt(data) },
+      ],
+      temperature,
+    }
+
+    if (json) {
+      body.response_format = { type: 'json_object' }
+    }
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -143,14 +194,7 @@ class OpenAIClient {
         'Authorization': `Bearer ${this.apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: 'system', content: template.systemPrompt },
-          { role: 'user', content: template.userPrompt(data) },
-        ],
-        temperature,
-      }),
+      body: JSON.stringify(body),
     })
 
     if (!response.ok) {

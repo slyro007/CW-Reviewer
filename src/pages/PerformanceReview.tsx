@@ -6,6 +6,10 @@ import { useTicketsStore } from '@/stores/ticketsStore'
 import { useTimePeriodStore } from '@/stores/timePeriodStore'
 import { api } from '@/lib/api'
 import { format } from 'date-fns'
+import {
+  Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend
+} from 'recharts'
 
 interface CategoryScore {
   name: string
@@ -14,6 +18,21 @@ interface CategoryScore {
   color: string
   issues: string[]
   recommendations: string[]
+}
+
+interface AIAnalysisResult {
+  summary: string
+  scores: {
+    timeTracking: number
+    notesQuality: number
+    billability: number
+    productivity: number
+    overall: number
+  }
+  strengths: string[]
+  weaknesses: string[]
+  recommendations: string[]
+  actionPlan: Array<{ step: string; priority: 'High' | 'Medium' | 'Low' }>
 }
 
 export default function PerformanceReview() {
@@ -25,11 +44,12 @@ export default function PerformanceReview() {
   const [isGeneratingReview, setIsGeneratingReview] = useState(false)
   const [aiReview, setAiReview] = useState<string | null>(null)
   const [reviewError, setReviewError] = useState<string | null>(null)
+  const [parsedAnalysis, setParsedAnalysis] = useState<AIAnalysisResult | null>(null)
 
   const dateRange = getDateRange()
   const periodLabel = getPeriodLabel()
 
-  const selectedEngineer = selectedEngineerId 
+  const selectedEngineer = selectedEngineerId
     ? members.find(m => m.id === selectedEngineerId)
     : null
 
@@ -41,205 +61,109 @@ export default function PerformanceReview() {
     })
   }, [dateRange.start.getTime(), dateRange.end.getTime()])
 
-  // Filter entries by engineer and date range
+  // Filter entries
   const filteredEntries = useMemo(() => {
     let result = entries.filter(e => {
       const entryDate = new Date(e.dateStart)
       return entryDate >= dateRange.start && entryDate <= dateRange.end
     })
-    
+
     if (selectedEngineerId !== null) {
       result = result.filter(e => e.memberId === selectedEngineerId)
     }
-    
+
     return result
   }, [entries, selectedEngineerId, dateRange])
 
-  // Calculate performance scores
+  // Calculate generic scores (Legacy/Fallback Logic)
   const categoryScores = useMemo((): CategoryScore[] => {
     const totalHours = filteredEntries.reduce((sum, e) => sum + e.hours, 0)
     const billableHours = filteredEntries
       .filter(e => e.billableOption === 'Billable')
       .reduce((sum, e) => sum + e.hours, 0)
     const billablePercent = totalHours > 0 ? (billableHours / totalHours) * 100 : 0
-    
+
     const withNotes = filteredEntries.filter(e => e.notes && e.notes.trim().length > 0)
-    const notesPercent = filteredEntries.length > 0 
-      ? (withNotes.length / filteredEntries.length) * 100 
+    const notesPercent = filteredEntries.length > 0
+      ? (withNotes.length / filteredEntries.length) * 100
       : 0
-    
     const avgNoteLength = withNotes.length > 0
       ? withNotes.reduce((sum, e) => sum + (e.notes?.length || 0), 0) / withNotes.length
       : 0
-    
+
     const uniqueTicketIds = new Set(filteredEntries.filter(e => e.ticketId).map(e => e.ticketId))
     const workedTickets = tickets.filter(t => uniqueTicketIds.has(t.id))
     const closedTickets = workedTickets.filter(t => t.closedFlag)
-    
-    const daysInPeriod = Math.ceil((dateRange.end.getTime() - dateRange.start.getTime()) / (1000 * 60 * 60 * 24))
+
+    const daysInPeriod = Math.max(1, Math.ceil((dateRange.end.getTime() - dateRange.start.getTime()) / (1000 * 60 * 60 * 24)))
     const avgHoursPerDay = totalHours / daysInPeriod
 
     const scores: CategoryScore[] = []
 
-    // Time Tracking Score
+    // Time Tracking
     const timeTrackingScore = Math.min(100, Math.round(
       (avgHoursPerDay >= 6 ? 40 : (avgHoursPerDay / 6) * 40) +
       (filteredEntries.length >= daysInPeriod * 0.7 ? 30 : (filteredEntries.length / (daysInPeriod * 0.7)) * 30) +
       (totalHours > 0 ? 30 : 0)
     ))
-    
-    const timeIssues: string[] = []
-    const timeRecommendations: string[] = []
-    if (avgHoursPerDay < 6) {
-      timeIssues.push(`Average ${avgHoursPerDay.toFixed(1)} hours/day is below target`)
-      timeRecommendations.push('Aim for at least 6 hours of tracked time per day')
-    }
-    if (filteredEntries.length < daysInPeriod * 0.5) {
-      timeIssues.push('Inconsistent time tracking detected')
-      timeRecommendations.push('Track time daily to improve consistency metrics')
-    }
-    
     scores.push({
       name: 'Time Tracking',
       score: timeTrackingScore,
       maxScore: 100,
       color: 'blue',
-      issues: timeIssues,
-      recommendations: timeRecommendations,
+      issues: avgHoursPerDay < 6 ? [`Avg ${avgHoursPerDay.toFixed(1)}h/day < 6h target`] : [],
+      recommendations: [],
     })
 
-    // Notes Quality Score
+    // Notes
     const notesScore = Math.min(100, Math.round(
       (notesPercent >= 90 ? 50 : (notesPercent / 90) * 50) +
-      (avgNoteLength >= 50 ? 30 : (avgNoteLength / 50) * 30) +
-      (avgNoteLength >= 100 ? 20 : (avgNoteLength / 100) * 20)
+      (avgNoteLength >= 50 ? 50 : (avgNoteLength / 50) * 50)
     ))
-    
-    const notesIssues: string[] = []
-    const notesRecommendations: string[] = []
-    if (notesPercent < 80) {
-      notesIssues.push(`Only ${notesPercent.toFixed(0)}% of entries have notes`)
-      notesRecommendations.push('Add notes to all time entries to improve documentation')
-    }
-    if (avgNoteLength < 30) {
-      notesIssues.push('Notes are too brief on average')
-      notesRecommendations.push('Include more detail: what was done, why, and any blockers')
-    }
-    
     scores.push({
       name: 'Notes Quality',
       score: notesScore,
       maxScore: 100,
-      color: 'blue',
-      issues: notesIssues,
-      recommendations: notesRecommendations,
-    })
-
-    // Billability Score
-    const billabilityScore = Math.min(100, Math.round(
-      billablePercent >= 70 ? 100 :
-      billablePercent >= 60 ? 80 :
-      billablePercent >= 50 ? 60 :
-      (billablePercent / 50) * 60
-    ))
-    
-    const billIssues: string[] = []
-    const billRecommendations: string[] = []
-    if (billablePercent < 70) {
-      billIssues.push(`Billable ratio of ${billablePercent.toFixed(0)}% is below target`)
-      billRecommendations.push('Focus on maximizing billable work where possible')
-    }
-    if (billablePercent < 50) {
-      billRecommendations.push('Review non-billable activities for efficiency improvements')
-    }
-    
-    scores.push({
-      name: 'Billability',
-      score: billabilityScore,
-      maxScore: 100,
-      color: 'green',
-      issues: billIssues,
-      recommendations: billRecommendations,
-    })
-
-    // Productivity Score
-    const ticketResolutionRate = workedTickets.length > 0 
-      ? (closedTickets.length / workedTickets.length) * 100 
-      : 0
-    
-    const productivityScore = Math.min(100, Math.round(
-      (uniqueTicketIds.size >= 20 ? 40 : (uniqueTicketIds.size / 20) * 40) +
-      (ticketResolutionRate >= 70 ? 40 : (ticketResolutionRate / 70) * 40) +
-      (closedTickets.length >= 10 ? 20 : (closedTickets.length / 10) * 20)
-    ))
-    
-    const prodIssues: string[] = []
-    const prodRecommendations: string[] = []
-    if (uniqueTicketIds.size < 10) {
-      prodIssues.push('Low ticket engagement')
-      prodRecommendations.push('Ensure time entries are linked to tickets')
-    }
-    if (ticketResolutionRate < 50) {
-      prodIssues.push('Low ticket resolution rate')
-      prodRecommendations.push('Focus on closing out open tickets before starting new work')
-    }
-    
-    scores.push({
-      name: 'Productivity',
-      score: productivityScore,
-      maxScore: 100,
-      color: 'orange',
-      issues: prodIssues,
-      recommendations: prodRecommendations,
+      color: 'purple',
+      issues: notesPercent < 80 ? [`${notesPercent.toFixed(0)}% notes notes present`] : [],
+      recommendations: [],
     })
 
     return scores
   }, [filteredEntries, tickets, dateRange])
 
-  // Calculate overall score
-  const overallScore = useMemo(() => {
-    if (categoryScores.length === 0) return 0
-    return Math.round(
-      categoryScores.reduce((sum, cat) => sum + cat.score, 0) / categoryScores.length
-    )
-  }, [categoryScores])
-
-  // Get score color
-  const getScoreColor = (score: number) => {
-    if (score >= 80) return 'text-green-400'
-    if (score >= 60) return 'text-yellow-400'
-    if (score >= 40) return 'text-orange-400'
-    return 'text-red-400'
-  }
-
-  const getScoreBgColor = (score: number) => {
-    if (score >= 80) return 'from-green-500 to-emerald-600'
-    if (score >= 60) return 'from-yellow-500 to-amber-600'
-    if (score >= 40) return 'from-orange-500 to-orange-600'
-    return 'from-red-500 to-red-600'
-  }
 
   // Generate AI Review
   const generateAIReview = async () => {
     if (!selectedEngineer) return
-    
+
     setIsGeneratingReview(true)
     setReviewError(null)
-    
+    setParsedAnalysis(null)
+
     try {
       const response = await api.generateAnalysis('mspStandardsReview', {
         member: selectedEngineer,
         entries: filteredEntries.slice(0, 50),
-        tickets: tickets.filter(t => 
+        tickets: tickets.filter(t =>
           filteredEntries.some(e => e.ticketId === t.id)
         ).slice(0, 20),
         period: {
           start: dateRange.start,
           end: dateRange.end,
         },
-      })
-      
+      }, { json: true, model: 'gpt-3.5-turbo-1106' }) // Explicitly request JSON
+
       setAiReview(response.analysis)
+
+      // Attempt generic Parse
+      try {
+        const parsed = JSON.parse(response.analysis)
+        setParsedAnalysis(parsed)
+      } catch (e) {
+        console.warn('AI Output was not valid JSON', e)
+      }
+
     } catch (error: any) {
       console.error('Error generating review:', error)
       setReviewError(error.message || 'Failed to generate review')
@@ -248,21 +172,24 @@ export default function PerformanceReview() {
     }
   }
 
+  // Radar Data
+  const radarData = useMemo(() => {
+    if (!parsedAnalysis?.scores) return []
+    return [
+      { subject: 'Time Tracking', A: parsedAnalysis.scores.timeTracking, fullMark: 100 },
+      { subject: 'Notes Quality', A: parsedAnalysis.scores.notesQuality, fullMark: 100 },
+      { subject: 'Billability', A: parsedAnalysis.scores.billability, fullMark: 100 },
+      { subject: 'Productivity', A: parsedAnalysis.scores.productivity, fullMark: 100 },
+      { subject: 'Overall', A: parsedAnalysis.scores.overall, fullMark: 100 },
+    ]
+  }, [parsedAnalysis])
+
   if (selectedEngineerId === null) {
     return (
       <div className="px-4 py-6 sm:px-0">
-        <div className="mb-6">
-          <h2 className="text-3xl font-bold text-white mb-2">Performance Review</h2>
-          <p className="text-gray-400">
-            Select an engineer from the sidebar to view their performance review
-            {' • '}<span className="text-blue-400">{periodLabel}</span>
-          </p>
-        </div>
-        
         <div className="bg-gray-800 rounded-lg p-12 text-center">
-          <p className="text-gray-400 text-lg">
-            Please select an engineer to view their performance review
-          </p>
+          <h2 className="text-xl font-bold text-gray-300 mb-2">Performance Review</h2>
+          <p className="text-gray-400">Please select an engineer to view analysis.</p>
         </div>
       </div>
     )
@@ -270,127 +197,175 @@ export default function PerformanceReview() {
 
   return (
     <div className="px-4 py-6 sm:px-0">
-      <div className="mb-6">
-        <h2 className="text-3xl font-bold text-white mb-2">Performance Review</h2>
-        <p className="text-gray-400">
-          Performance evaluation for {selectedEngineer?.firstName} {selectedEngineer?.lastName}
-          {' • '}<span className="text-blue-400">{periodLabel}</span>
-        </p>
-      </div>
-
-      {/* Overall Score */}
-      <div className={`bg-gradient-to-br ${getScoreBgColor(overallScore)} rounded-xl p-8 mb-6 text-center`}>
-        <p className="text-white/80 text-lg mb-2">Overall Performance Score</p>
-        <p className="text-7xl font-bold text-white mb-2">{overallScore}</p>
-        <p className="text-white/80">
-          {overallScore >= 80 ? 'Excellent Performance' :
-           overallScore >= 60 ? 'Good Performance' :
-           overallScore >= 40 ? 'Needs Improvement' :
-           'Requires Attention'}
-        </p>
-      </div>
-
-      {/* Category Scores */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        {categoryScores.map((category) => (
-          <div key={category.name} className="bg-gray-800 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white">{category.name}</h3>
-              <span className={`text-3xl font-bold ${getScoreColor(category.score)}`}>
-                {category.score}
-              </span>
-            </div>
-            
-            {/* Progress Bar */}
-            <div className="h-3 bg-gray-700 rounded-full mb-4 overflow-hidden">
-              <div 
-                className={`h-full rounded-full transition-all duration-500 ${
-                  category.score >= 80 ? 'bg-green-500' :
-                  category.score >= 60 ? 'bg-yellow-500' :
-                  category.score >= 40 ? 'bg-orange-500' :
-                  'bg-red-500'
-                }`}
-                style={{ width: `${category.score}%` }}
-              />
-            </div>
-            
-            {/* Issues */}
-            {category.issues.length > 0 && (
-              <div className="mb-3">
-                <p className="text-sm text-gray-400 mb-1">Issues:</p>
-                <ul className="space-y-1">
-                  {category.issues.map((issue, i) => (
-                    <li key={i} className="text-sm text-red-400 flex items-start gap-2">
-                      <span>•</span> {issue}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            
-            {/* Recommendations */}
-            {category.recommendations.length > 0 && (
-              <div>
-                <p className="text-sm text-gray-400 mb-1">Recommendations:</p>
-                <ul className="space-y-1">
-                  {category.recommendations.map((rec, i) => (
-                    <li key={i} className="text-sm text-blue-400 flex items-start gap-2">
-                      <span>•</span> {rec}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            
-            {category.issues.length === 0 && category.recommendations.length === 0 && (
-              <p className="text-sm text-green-400">✓ Meeting expectations</p>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* AI Review */}
-      <div className="bg-gray-800 rounded-lg p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold text-white">AI Performance Analysis</h3>
-          <button
-            onClick={generateAIReview}
-            disabled={isGeneratingReview}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              isGeneratingReview
-                ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700 text-white'
-            }`}
-          >
-            {isGeneratingReview ? (
-              <span className="flex items-center gap-2">
-                <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></span>
-                Analyzing...
-              </span>
-            ) : (
-              'Generate Detailed Review'
-            )}
-          </button>
-        </div>
-        
-        {reviewError && (
-          <div className="bg-red-600/20 border border-red-500 rounded-lg p-4 mb-4">
-            <p className="text-red-400">{reviewError}</p>
-          </div>
-        )}
-        
-        {aiReview ? (
-          <div className="bg-gray-700 rounded-lg p-6">
-            <div className="whitespace-pre-wrap text-gray-200 leading-relaxed">
-              {aiReview}
-            </div>
-          </div>
-        ) : (
+      <div className="mb-6 flex justify-between items-center">
+        <div>
+          <h2 className="text-3xl font-bold text-white mb-2">Performance Intelligence</h2>
           <p className="text-gray-400">
-            Click "Generate Detailed Review" for an AI-powered comprehensive analysis with specific recommendations
+            Deep analysis for {selectedEngineer?.firstName} {selectedEngineer?.lastName}
+            {' • '}<span className="text-blue-400">{periodLabel}</span>
           </p>
-        )}
+        </div>
+
+        <button
+          onClick={generateAIReview}
+          disabled={isGeneratingReview}
+          className={`px-6 py-3 rounded-lg font-medium transition-all shadow-lg flex items-center gap-2 ${isGeneratingReview
+              ? 'bg-gray-700 text-gray-400 cursor-wait'
+              : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white hover:scale-105'
+            }`}
+        >
+          {isGeneratingReview ? (
+            <>
+              <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Running Analysis...
+            </>
+          ) : (
+            <>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+              Generate AI Analysis
+            </>
+          )}
+        </button>
       </div>
+
+      {reviewError && (
+        <div className="bg-red-500/10 border border-red-500/50 rounded-lg p-4 mb-6 text-red-400">
+          {reviewError}
+        </div>
+      )}
+
+      {/* Main Analysis Content */}
+      {parsedAnalysis ? (
+        <div className="space-y-6 animate-in fade-in duration-500">
+
+          {/* Top Row: Chart + Summary */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Radar Chart */}
+            <div className="bg-gray-800 rounded-xl p-6 border border-gray-700 shadow-xl col-span-1">
+              <h3 className="text-lg font-semibold text-gray-200 mb-4 text-center">Competency Matrix</h3>
+              <div className="h-[300px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
+                    <PolarGrid stroke="#374151" />
+                    <PolarAngleAxis dataKey="subject" tick={{ fill: '#9CA3AF', fontSize: 12 }} />
+                    <PolarRadiusAxis angle={30} domain={[0, 100]} stroke="#4B5563" />
+                    <Radar
+                      name="Score"
+                      dataKey="A"
+                      stroke="#8B5CF6"
+                      strokeWidth={3}
+                      fill="#8B5CF6"
+                      fillOpacity={0.3}
+                    />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#F3F4F6' }}
+                      itemStyle={{ color: '#A78BFA' }}
+                    />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Executive Summary */}
+            <div className="bg-gray-800 rounded-xl p-8 border border-gray-700 shadow-xl col-span-1 lg:col-span-2 flex flex-col justify-center">
+              <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-teal-400 mb-6">
+                Executive Summary
+              </h3>
+              <p className="text-gray-300 text-lg leading-relaxed whitespace-pre-wrap">
+                {parsedAnalysis.summary}
+              </p>
+            </div>
+          </div>
+
+          {/* Middle Row: Strengths vs Weaknesses */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-gray-800/50 rounded-xl p-6 border border-green-900/30">
+              <h3 className="text-lg font-semibold text-green-400 mb-4 flex items-center gap-2">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                Key Strengths
+              </h3>
+              <ul className="space-y-3">
+                {parsedAnalysis.strengths.map((str, i) => (
+                  <li key={i} className="flex gap-3 text-gray-300 bg-gray-900/50 p-3 rounded-lg">
+                    <span className="text-green-500 font-bold">•</span>
+                    {str}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="bg-gray-800/50 rounded-xl p-6 border border-red-900/30">
+              <h3 className="text-lg font-semibold text-red-400 mb-4 flex items-center gap-2">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                Areas for Improvement
+              </h3>
+              <ul className="space-y-3">
+                {parsedAnalysis.weaknesses.map((weak, i) => (
+                  <li key={i} className="flex gap-3 text-gray-300 bg-gray-900/50 p-3 rounded-lg">
+                    <span className="text-red-500 font-bold">•</span>
+                    {weak}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          {/* Action Plan */}
+          <div className="bg-gray-800 rounded-xl p-8 border border-gray-700">
+            <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+              <svg className="w-6 h-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+              Strategic Action Plan
+            </h3>
+            <div className="space-y-4">
+              {parsedAnalysis.actionPlan.map((action, i) => (
+                <div key={i} className="flex flex-col sm:flex-row gap-4 items-start sm:items-center bg-gray-900/40 p-4 rounded-lg border border-gray-700/50 hover:bg-gray-900/60 transition-colors">
+                  <div className={`
+                                px-3 py-1 rounded text-xs font-bold uppercase tracking-wider
+                                ${action.priority === 'High' ? 'bg-red-500/20 text-red-400' :
+                      action.priority === 'Medium' ? 'bg-yellow-500/20 text-yellow-400' :
+                        'bg-blue-500/20 text-blue-400'}
+                            `}>
+                    {action.priority} Priority
+                  </div>
+                  <p className="text-gray-200 font-medium flex-1">{action.step}</p>
+                  <div className="w-6 h-6 rounded-full border-2 border-gray-600 flex items-center justify-center">
+                    <span className="text-gray-600 text-xs">{i + 1}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      ) : (
+        /* Fallback / Initial State */
+        <div className="grid grid-cols-1 gap-6">
+          {!aiReview && (
+            <div className="bg-gray-800/50 border-2 border-dashed border-gray-700 rounded-xl p-12 text-center flex flex-col items-center justify-center min-h-[400px]">
+              <div className="w-20 h-20 bg-gray-700/50 rounded-full flex items-center justify-center mb-6">
+                <svg className="w-10 h-10 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
+              </div>
+              <h3 className="text-xl font-medium text-gray-300 mb-2">Ready to Analyze</h3>
+              <p className="text-gray-500 max-w-md">
+                Click "Generate AI Analysis" to process time entries and ticket data using GPT. The analysis provides deep insights, calculating proprietary scores and identifying behavioral patterns.
+              </p>
+            </div>
+          )}
+
+          {/* Raw Output Fallback (In case JSON parse fails but we have review) */}
+          {aiReview && !parsedAnalysis && (
+            <div className="bg-gray-800 rounded-xl p-8 border border-gray-700">
+              <h3 className="text-xl font-bold text-white mb-4">Analysis Result</h3>
+              <div className="whitespace-pre-wrap text-gray-300 leading-relaxed font-mono text-sm bg-gray-900 p-6 rounded-lg">
+                {aiReview}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

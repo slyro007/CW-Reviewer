@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import TeamFilter from '@/components/TeamFilter'
-import DataSourceFilter from '@/components/DataSourceFilter'
+import DataSourceFilter, { type DataSource } from '@/components/DataSourceFilter'
 import { useMembersStore } from '@/stores/membersStore'
 import { useTicketsStore } from '@/stores/ticketsStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
@@ -19,13 +19,9 @@ export default function Dashboard() {
   } = useTimeEntriesStore()
 
   const {
-    tickets, // These are Project Board tickets usually
     serviceTickets,
-    isLoading: ticketsLoading,
     isLoadingService,
-    fetchTickets, // Fetches project board tickets (legacy naming?) or ALL? Default fetchTickets fetches ALL if no params.
     fetchServiceBoardTickets,
-    syncTickets,
     syncServiceTickets,
     getTicketStats
   } = useTicketsStore()
@@ -33,20 +29,20 @@ export default function Dashboard() {
   const {
     projects,
     projectTickets,
-    isLoading: projectsLoading,
     fetchProjects,
     fetchProjectTickets,
     syncProjects,
     syncProjectTickets,
-    getProjectStats
+    getProjectStats,
+    getProjectTicketStats
   } = useProjectsStore()
 
   const { getDateRange, getPeriodLabel } = useTimePeriodStore()
   const { selectedEngineerId } = useSelectedEngineerStore()
 
   // Local state for toggles
-  const [dataSources, setDataSources] = useState<('service' | 'projects')[]>(['service', 'projects'])
-  const includesServiceDesk = dataSources.includes('service')
+  const [dataSources, setDataSources] = useState<DataSource[]>(['serviceDesk', 'projects'])
+  const includesServiceDesk = dataSources.includes('serviceDesk')
   const includesProjects = dataSources.includes('projects')
 
   // Load Initial Data (Once)
@@ -96,44 +92,32 @@ export default function Dashboard() {
     }).sort((a, b) => new Date(b.dateStart).getTime() - new Date(a.dateStart).getTime())
   }, [entries, dateRange, selectedEngineerId])
 
-  // Filter Service Tickets (by Date? Usually tickets are filtering by "Closed Date" or "Entered Date" if strictly in period)
-  // For "Service Tickets" widget, usually we show active OR closed in period.
-  // We'll filter by: Active OR (Closed in DateRange)
+  // Filter Service Tickets
   const filteredServiceTickets = useMemo(() => {
     if (!dateRange.start || !dateRange.end) return serviceTickets
 
     return serviceTickets.filter(t => {
       // Engineer Filter
-      // (Ticket resource matching is complex string matching, simplified here or ignored if TeamFilter logic is mainly for Time Entries)
-      // Usually Dashboard filters tickets by Owner/Resource if engineer selected.
       if (selectedEngineerId) {
         const member = members.find(m => m.id === selectedEngineerId)
         if (member) {
-          // Check owner or resources
           const isOwner = t.owner === member.identifier
           const isResource = t.resources?.includes(member.identifier)
           if (!isOwner && !isResource) return false
         }
       }
 
-      // Date Filter
-      // If Open: Include? (Usually yes, "Open Tickets" are irrelevant of date entered, they are current backlog)
-      // If Closed: Include only if closed in range?
+      // Date Filter (Closed in range or Open)
       if (t.closedFlag) {
         if (!t.closedDate) return false
         const closedAt = new Date(t.closedDate)
         return closedAt >= dateRange.start! && closedAt <= dateRange.end!
       }
-
-      // If Open, show it (as it's current work)
-      // OR do we restrict "Open" to "Entered in range"?
-      // Typically "Overview" shows "Current Open" + "Closed Recently".
-      // Let's assume inclusive.
       return true
     })
   }, [serviceTickets, dateRange, selectedEngineerId, members])
 
-  // Filter Projects (Active OR Closed in Range)
+  // Filter Projects
   const filteredProjects = useMemo(() => {
     if (!dateRange.start || !dateRange.end) return projects
 
@@ -145,51 +129,68 @@ export default function Dashboard() {
           return false
         }
       }
-
-      // Date Filter
-      if (p.closedFlag) {
-        // Projects often don't have closedDate in some models, check actualEnd?
-        // Or just show all if not too many?
-        // The logic: If closed, must be relevant to period.
-        // If we don't have closedDate, we might skip or show.
-        // Let's keep logic simple: Show all for now, as projects are long running.
-        // Or filter by "Active" mainly.
-      }
       return true
     })
   }, [projects, selectedEngineerId, members, dateRange])
 
+  // Filter Project Tickets
+  const filteredProjectTickets = useMemo(() => {
+    if (!dateRange.start || !dateRange.end) return projectTickets
+
+    return projectTickets.filter(t => {
+      // Engineer Filter (Resources)
+      if (selectedEngineerId) {
+        const member = members.find(m => m.id === selectedEngineerId)
+        if (member) {
+          const isResource = t.resources?.toLowerCase().includes(member.identifier.toLowerCase())
+          if (!isResource) return false
+        }
+      }
+
+      // Date Filter
+      if (t.closedFlag) {
+        if (!t.closedDate) return false
+        const closedAt = new Date(t.closedDate)
+        return closedAt >= dateRange.start! && closedAt <= dateRange.end!
+      }
+      return true
+    })
+  }, [projectTickets, selectedEngineerId, members, dateRange])
+
 
   // Calculate Stats
-  const ticketStats = useMemo(() => getTicketStats(filteredServiceTickets), [filteredServiceTickets]) // Use helper from store (need to export it or logic here)
-  // Store has `getTicketStats`, but need to import/destructure it. Added to destructure above.
+  const ticketStats = useMemo(() => getTicketStats(filteredServiceTickets), [filteredServiceTickets, getTicketStats])
 
-  const projectStats = useMemo(() => getProjectStats(filteredProjects), [filteredProjects])
+  const projectStats = useMemo(() => getProjectStats(filteredProjects), [filteredProjects, getProjectStats])
+
+  const projectTicketStats = useMemo(() => {
+    // Use helper or derived locally
+    return getProjectTicketStats(filteredProjectTickets)
+  }, [filteredProjectTickets, getProjectTicketStats])
+
+  // Manual calculation for Project Tickets Closed (since helper returns statuses, not "closed" boolean count specifically)
+  // Actually helper likely maps statuses. But we can use loop for safety or check closedFlag.
+  const projectTicketsClosedCount = useMemo(() =>
+    filteredProjectTickets.filter(t => t.closedFlag).length
+    , [filteredProjectTickets])
+
 
   // Aggregate Member Stats
   const membersWithHours = useMemo(() => {
     return members.map(m => {
-      // Only sum hours from *filtered* entries (which are already date-filtered)
-      // But we must NOT filter filteredEntries by memberId *again* if it was already filtered by selectedEngineerId logic?
-      // Wait, if selectedEngineerId is set, filteredEntries only contains that engineer.
-      // So other members will have 0 hours. This is correct behavior for "Engineers Overview" (others disappear or show 0).
-      // Actually, if selectedEngineerId is set, filteredMembers usually only shows that one.
-
       const memberEntries = filteredEntries.filter(e => e.memberId === m.id)
       const total = memberEntries.reduce((sum, e) => sum + e.hours, 0)
       return { ...m, totalHours: total }
     })
       .filter(m => {
-        // Visibility logic
         if (selectedEngineerId && m.id !== selectedEngineerId) return false
-        if (m.totalHours === 0 && !selectedEngineerId) return false // Hide 0 hours if showing all? Or show all?
-        // Usually show keys
+        if (m.totalHours === 0 && !selectedEngineerId) return false
         return m.totalHours > 0 || (selectedEngineerId ? m.id === selectedEngineerId : false)
       })
       .sort((a, b) => b.totalHours - a.totalHours)
   }, [members, filteredEntries, selectedEngineerId])
 
-  const filteredMembers = membersWithHours // Alias for JSX usage
+  const filteredMembers = membersWithHours
 
   const totalHours = useMemo(() => filteredEntries.reduce((sum, e) => sum + e.hours, 0), [filteredEntries])
   const billableHours = useMemo(() => filteredEntries.reduce((sum, e) => e.billableOption === 'Billable' ? sum + e.hours : sum, 0), [filteredEntries])
@@ -266,11 +267,11 @@ export default function Dashboard() {
           </div>
           <div className="bg-gradient-to-br from-violet-600 to-violet-700 rounded-lg p-5">
             <h3 className="text-xs font-medium text-violet-100 mb-1">Project Tickets</h3>
-            <p className="text-3xl font-bold text-white">{projectStats.ticketsTotal}</p>
+            <p className="text-3xl font-bold text-white">{projectTicketStats.total}</p>
           </div>
           <div className="bg-gradient-to-br from-purple-600 to-violet-700 rounded-lg p-5">
             <h3 className="text-xs font-medium text-purple-100 mb-1">Tickets Closed</h3>
-            <p className="text-3xl font-bold text-white">{projectStats.ticketsClosed}</p>
+            <p className="text-3xl font-bold text-white">{projectTicketsClosedCount}</p>
           </div>
         </div>
       )}
