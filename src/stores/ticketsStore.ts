@@ -83,27 +83,53 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
     try {
       const data = await api.getTickets(params)
 
-      const tickets: Ticket[] = data.map((t: any) => ({
-        id: t.id,
-        summary: t.summary || '',
-        boardId: t.board?.id || t.boardId || 0,
-        status: t.status?.name || t.status || 'Unknown',
-        closedDate: t.closedDate ? new Date(t.closedDate) : undefined,
-        closedFlag: t.closedFlag || false,
-        dateEntered: t.dateEntered ? new Date(t.dateEntered) : undefined,
-        resolvedDate: t.resolvedDate ? new Date(t.resolvedDate) : undefined,
-        resolutionTime: (t.resolvedDate || t.closedDate) && t.dateEntered
-          ? (new Date(t.resolvedDate || t.closedDate).getTime() - new Date(t.dateEntered).getTime()) / (1000 * 60 * 60)
-          : undefined,
-        // Additional project fields
-        type: t.type?.name || undefined,
-        priority: t.priority?.name || undefined,
-        owner: t.owner?.identifier || undefined,
-        company: t.company?.name || undefined,
-        estimatedHours: t.estimatedHours || undefined,
-        actualHours: t.actualHours || undefined,
-        updatedAt: t.updatedAt ? new Date(t.updatedAt) : undefined
-      }))
+      // Debug: Log raw keys of first ticket
+      if (data.length > 0) {
+        console.log('[DEBUG] Raw Ticket Keys:', Object.keys(data[0]))
+        console.log('[DEBUG] First Ticket Dates:', {
+          dateEntered: data[0].dateEntered,
+          date_entered: data[0].date_entered,
+          closedDate: data[0].closedDate,
+          closed_date: data[0].closed_date
+        })
+      }
+
+      const tickets: Ticket[] = data.map((t: any) => {
+        // Handle date parsing with checks
+        const dateEnteredVal = t.dateEntered || t.date_entered
+        const dateEntered = dateEnteredVal ? new Date(dateEnteredVal) : undefined
+
+        const closedDateVal = t.closedDate || t.closed_date
+        const closedDate = closedDateVal ? new Date(closedDateVal) : undefined
+
+        const resolvedDateVal = t.resolvedDate || t.resolved_date || t.dateResolved
+        const resolvedDate = resolvedDateVal ? new Date(resolvedDateVal) : undefined
+
+        // Ensure valid date objects
+        const isValidDate = (d: Date | undefined) => d instanceof Date && !isNaN(d.getTime())
+
+        return {
+          id: t.id,
+          summary: t.summary || '',
+          boardId: t.board?.id || t.boardId || 0,
+          status: t.status?.name || t.status || 'Unknown',
+          closedDate: isValidDate(closedDate) ? closedDate : undefined,
+          closedFlag: t.closedFlag || false,
+          dateEntered: isValidDate(dateEntered) ? dateEntered : undefined,
+          resolvedDate: isValidDate(resolvedDate) ? resolvedDate : undefined,
+          resolutionTime: (isValidDate(resolvedDate) || isValidDate(closedDate)) && isValidDate(dateEntered)
+            ? (new Date(resolvedDate! || closedDate!).getTime() - new Date(dateEntered!).getTime()) / (1000 * 60 * 60)
+            : undefined,
+          // Additional project fields
+          type: t.type?.name || undefined,
+          priority: t.priority?.name || undefined,
+          owner: t.owner?.identifier || undefined,
+          company: t.company?.name || undefined,
+          estimatedHours: t.estimatedHours || undefined,
+          actualHours: t.actualHours || undefined,
+          updatedAt: t.updatedAt ? new Date(t.updatedAt) : undefined
+        }
+      })
 
       set({ tickets, isLoading: false, lastSync: new Date() })
       console.log(`✅ Fetched ${tickets.length} tickets`)

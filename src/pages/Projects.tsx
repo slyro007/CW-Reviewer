@@ -61,6 +61,7 @@ export default function Projects() {
   const { getPeriodLabel, getDateRange } = useTimePeriodStore()
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
+  const [showActiveOnly, setShowActiveOnly] = useState(false)
   const [viewMode, setViewMode] = useState<'projects' | 'tickets'>('projects')
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null)
   const [isGeneratingAnalysis, setIsGeneratingAnalysis] = useState(false)
@@ -568,6 +569,16 @@ Keep the tone professional and actionable.`
             <label className="block text-sm font-medium text-gray-300 mb-1">
               Status
             </label>
+            {/* Active Only Toggle */}
+            <button
+              onClick={() => setShowActiveOnly(!showActiveOnly)}
+              className={`px-3 py-2 rounded text-sm font-medium transition-colors ${showActiveOnly
+                  ? 'bg-green-600 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+            >
+              Active Projects (14d)
+            </button>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -638,6 +649,9 @@ Keep the tone professional and actionable.`
                       <td className="py-3 px-4">
                         <p className="text-white font-medium truncate max-w-xs" title={project.name}>
                           {project.name}
+                          {entries.some(e => e.projectId === project.id && new Date(e.dateStart) >= new Date(Date.now() - 14 * 24 * 60 * 60 * 1000)) && (
+                            <span className="ml-2 px-1.5 py-0.5 bg-green-900 text-green-300 text-[10px] rounded border border-green-700">Active</span>
+                          )}
                         </p>
                         {project.type && (
                           <span className="text-xs text-gray-500">{project.type}</span>

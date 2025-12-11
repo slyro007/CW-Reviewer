@@ -30,7 +30,9 @@ export default function Notes() {
   const { getDateRange, getPeriodLabel } = useTimePeriodStore()
 
   const { dataSources, setDataSources, includesServiceDesk, includesProjects } = useDataSources()
+
   const [sortBy, setSortBy] = useState<'date' | 'quality' | 'hours'>('date')
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
   const [filterQuality, setFilterQuality] = useState<'all' | 'good' | 'poor'>('all')
 
   const dateRange = getDateRange()
@@ -124,20 +126,24 @@ export default function Notes() {
     }
 
     // Sorting
-    switch (sortBy) {
-      case 'date':
-        result.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-        break
-      case 'quality':
-        result.sort((a, b) => b.qualityScore - a.qualityScore)
-        break
-      case 'hours':
-        result.sort((a, b) => b.hours - a.hours)
-        break
-    }
+    result.sort((a, b) => {
+      let comparison = 0
+      switch (sortBy) {
+        case 'date':
+          comparison = new Date(a.date).getTime() - new Date(b.date).getTime()
+          break
+        case 'quality':
+          comparison = a.qualityScore - b.qualityScore
+          break
+        case 'hours':
+          comparison = a.hours - b.hours
+          break
+      }
+      return sortDirection === 'asc' ? comparison : -comparison
+    })
 
     return result
-  }, [enrichedEntries, filterQuality, sortBy])
+  }, [enrichedEntries, filterQuality, sortBy, sortDirection])
 
   // Stats
   const stats = useMemo(() => {
@@ -192,133 +198,183 @@ export default function Notes() {
         <DataSourceFilter selected={dataSources} onChange={setDataSources} />
       </div>
 
-      {/* Stats Summary */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
-        <div className="bg-gray-800 rounded-lg p-4">
-          <h3 className="text-xs font-medium text-gray-400 mb-1">Total Entries</h3>
-          <p className="text-2xl font-bold text-white">{stats.total}</p>
-        </div>
-        <div className="bg-gray-800 rounded-lg p-4">
-          <h3 className="text-xs font-medium text-gray-400 mb-1">With Notes</h3>
-          <p className="text-2xl font-bold text-green-400">{stats.notesPercent.toFixed(0)}%</p>
-        </div>
-        <div className="bg-gray-800 rounded-lg p-4">
-          <h3 className="text-xs font-medium text-gray-400 mb-1">Avg Quality</h3>
-          <p className={`text-2xl font-bold ${stats.avgQuality >= 60 ? 'text-green-400' : stats.avgQuality >= 40 ? 'text-yellow-400' : 'text-red-400'}`}>
-            {stats.avgQuality.toFixed(0)}
-          </p>
-        </div>
-        {includesServiceDesk && (
-          <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="text-xs font-medium text-gray-400 mb-1">Service Desk</h3>
-            <p className="text-2xl font-bold text-cyan-400">{stats.serviceDeskCount}</p>
+      {/* Content Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+        {/* Main Content (3 Columns) */}
+        <div className="lg:col-span-3 space-y-6">
+          {/* Stats Summary */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-gray-800 rounded-lg p-4">
+              <h3 className="text-xs font-medium text-gray-400 mb-1">Total Entries</h3>
+              <p className="text-2xl font-bold text-white">{stats.total}</p>
+            </div>
+            <div className="bg-gray-800 rounded-lg p-4">
+              <h3 className="text-xs font-medium text-gray-400 mb-1">With Notes</h3>
+              <p className="text-2xl font-bold text-green-400">{stats.notesPercent.toFixed(0)}%</p>
+            </div>
+            <div className="bg-gray-800 rounded-lg p-4">
+              <h3 className="text-xs font-medium text-gray-400 mb-1">Avg Quality</h3>
+              <p className={`text-2xl font-bold ${stats.avgQuality >= 60 ? 'text-green-400' : stats.avgQuality >= 40 ? 'text-yellow-400' : 'text-red-400'}`}>
+                {stats.avgQuality.toFixed(0)}
+              </p>
+            </div>
+            <div className="bg-gray-800 rounded-lg p-4">
+              <h3 className="text-xs font-medium text-gray-400 mb-1">Need Improvement</h3>
+              <p className="text-2xl font-bold text-orange-400">{stats.poorQuality + stats.withoutNotes}</p>
+            </div>
           </div>
-        )}
-        {includesProjects && (
-          <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="text-xs font-medium text-gray-400 mb-1">Projects</h3>
-            <p className="text-2xl font-bold text-purple-400">{stats.projectsCount}</p>
-          </div>
-        )}
-        <div className="bg-gray-800 rounded-lg p-4">
-          <h3 className="text-xs font-medium text-gray-400 mb-1">Need Improvement</h3>
-          <p className="text-2xl font-bold text-orange-400">{stats.poorQuality + stats.withoutNotes}</p>
-        </div>
-      </div>
 
-      {/* Quality Distribution */}
-      <div className="bg-gray-800 rounded-lg p-6 mb-6">
-        <h3 className="text-lg font-semibold text-white mb-4">Quality Distribution</h3>
-        <div className="flex items-center gap-2 h-8 rounded-lg overflow-hidden">
-          {stats.goodQuality > 0 && (
-            <div className="h-full bg-green-500" style={{ width: `${(stats.goodQuality / stats.total) * 100}%` }} title={`Good: ${stats.goodQuality}`} />
-          )}
-          {stats.poorQuality > 0 && (
-            <div className="h-full bg-yellow-500" style={{ width: `${(stats.poorQuality / stats.total) * 100}%` }} title={`Needs work: ${stats.poorQuality}`} />
-          )}
-          {stats.withoutNotes > 0 && (
-            <div className="h-full bg-red-500" style={{ width: `${(stats.withoutNotes / stats.total) * 100}%` }} title={`No notes: ${stats.withoutNotes}`} />
-          )}
-        </div>
-        <div className="flex flex-wrap gap-4 mt-3 text-sm">
-          <span className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-green-500"></span>Good ({stats.goodQuality})</span>
-          <span className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-yellow-500"></span>Needs Work ({stats.poorQuality})</span>
-          <span className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-red-500"></span>No Notes ({stats.withoutNotes})</span>
-        </div>
-      </div>
-
-      {/* Filters */}
-      <div className="bg-gray-800 rounded-lg p-4 mb-6 flex flex-wrap gap-4 items-center">
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-400">Sort by:</span>
-          <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}
-            className="bg-gray-700 text-white px-3 py-1.5 rounded-lg text-sm border border-gray-600 focus:border-blue-500 focus:outline-none">
-            <option value="date">Date</option>
-            <option value="quality">Quality Score</option>
-            <option value="hours">Hours</option>
-          </select>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-400">Quality:</span>
-          <select value={filterQuality} onChange={(e) => setFilterQuality(e.target.value as any)}
-            className="bg-gray-700 text-white px-3 py-1.5 rounded-lg text-sm border border-gray-600 focus:border-blue-500 focus:outline-none">
-            <option value="all">All</option>
-            <option value="good">Good (60+)</option>
-            <option value="poor">Needs Improvement (&lt;60)</option>
-          </select>
-        </div>
-        <span className="text-sm text-gray-400 ml-auto">Showing {displayEntries.length} of {enrichedEntries.length}</span>
-      </div>
-
-      {/* Entries List */}
-      <div className="bg-gray-800 rounded-lg overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full">
-            <thead className="bg-gray-700">
-              <tr>
-                <th className="text-left py-3 px-4 text-gray-300 text-sm font-medium">Date</th>
-                <th className="text-left py-3 px-4 text-gray-300 text-sm font-medium">Source</th>
-                <th className="text-left py-3 px-4 text-gray-300 text-sm font-medium">Hours</th>
-                <th className="text-left py-3 px-4 text-gray-300 text-sm font-medium">Quality</th>
-                <th className="text-left py-3 px-4 text-gray-300 text-sm font-medium">Notes</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-700">
-              {displayEntries.length === 0 ? (
-                <tr><td colSpan={5} className="py-8 text-center text-gray-400">No entries found</td></tr>
-              ) : (
-                displayEntries.slice(0, 50).map((entry) => {
-                  const sourceBadge = getSourceBadge(entry.source)
-                  return (
-                    <tr key={entry.id} className="hover:bg-gray-700/50">
-                      <td className="py-3 px-4 text-sm text-gray-300">{format(new Date(entry.date), 'MMM d, yyyy')}</td>
-                      <td className="py-3 px-4">
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${sourceBadge.class}`}>{sourceBadge.label}</span>
-                      </td>
-                      <td className="py-3 px-4 text-sm text-white font-medium">{entry.hours}h</td>
-                      <td className="py-3 px-4">
-                        <span className={`px-2 py-1 rounded text-xs font-medium ${getQualityColor(entry.qualityScore)}`}>
-                          {entry.qualityScore}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-sm text-gray-300 max-w-md">
-                        {entry.ticketSummary && (
-                          <div className="text-xs text-gray-500 mb-1">Ticket: {entry.ticketSummary.substring(0, 50)}...</div>
-                        )}
-                        <div className="truncate">{entry.notes || <span className="text-red-400 italic">No notes</span>}</div>
-                      </td>
-                    </tr>
-                  )
-                })
+          {/* Quality Distribution Bar (Simplified) */}
+          <div className="bg-gray-800 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-white mb-4">Quality Distribution</h3>
+            <div className="flex items-center gap-2 h-8 rounded-lg overflow-hidden mb-3">
+              {stats.goodQuality > 0 && (
+                <div className="h-full bg-green-500" style={{ width: `${(stats.goodQuality / stats.total) * 100}%` }} title={`Good: ${stats.goodQuality}`} />
               )}
-            </tbody>
-          </table>
-        </div>
-        {displayEntries.length > 50 && (
-          <div className="p-4 text-center text-gray-400 text-sm border-t border-gray-700">
-            Showing 50 of {displayEntries.length} entries
+              {stats.poorQuality > 0 && (
+                <div className="h-full bg-yellow-500" style={{ width: `${(stats.poorQuality / stats.total) * 100}%` }} title={`Needs work: ${stats.poorQuality}`} />
+              )}
+              {stats.withoutNotes > 0 && (
+                <div className="h-full bg-red-500" style={{ width: `${(stats.withoutNotes / stats.total) * 100}%` }} title={`No notes: ${stats.withoutNotes}`} />
+              )}
+            </div>
           </div>
-        )}
+
+          {/* Filters */}
+          <div className="bg-gray-800 rounded-lg p-4 flex flex-wrap gap-4 items-center">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-400">Sort by:</span>
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}
+                className="bg-gray-700 text-white px-3 py-1.5 rounded-lg text-sm border border-gray-600 focus:border-blue-500 focus:outline-none">
+                <option value="date">Date</option>
+                <option value="quality">Quality Score</option>
+                <option value="hours">Hours</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-400">Quality:</span>
+              <select value={filterQuality} onChange={(e) => setFilterQuality(e.target.value as any)}
+                className="bg-gray-700 text-white px-3 py-1.5 rounded-lg text-sm border border-gray-600 focus:border-blue-500 focus:outline-none">
+                <option value="all">All</option>
+                <option value="good">Good (60+)</option>
+                <option value="poor">Needs Improvement (&lt;60)</option>
+              </select>
+            </div>
+            <span className="text-sm text-gray-400 ml-auto">Showing {displayEntries.length} of {enrichedEntries.length}</span>
+          </div>
+
+          {/* Entries List */}
+          <div className="bg-gray-800 rounded-lg overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="min-w-full">
+                <thead className="bg-gray-700">
+                  <tr>
+                    <th onClick={() => { setSortBy('date'); setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); }} className="text-left py-3 px-4 text-gray-300 text-sm font-medium cursor-pointer hover:text-white transition-colors select-none">Date {sortBy === 'date' && (sortDirection === 'asc' ? '↑' : '↓')}</th>
+                    <th className="text-left py-3 px-4 text-gray-300 text-sm font-medium">Source</th>
+                    <th onClick={() => { setSortBy('hours'); setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); }} className="text-left py-3 px-4 text-gray-300 text-sm font-medium cursor-pointer hover:text-white transition-colors select-none">Hours {sortBy === 'hours' && (sortDirection === 'asc' ? '↑' : '↓')}</th>
+                    <th onClick={() => { setSortBy('quality'); setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc'); }} className="text-left py-3 px-4 text-gray-300 text-sm font-medium cursor-pointer hover:text-white transition-colors select-none">Quality {sortBy === 'quality' && (sortDirection === 'asc' ? '↑' : '↓')}</th>
+                    <th className="text-left py-3 px-4 text-gray-300 text-sm font-medium">Notes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700">
+                  {displayEntries.length === 0 ? (
+                    <tr><td colSpan={5} className="py-8 text-center text-gray-400">No entries found</td></tr>
+                  ) : (
+                    displayEntries.slice(0, 50).map((entry) => {
+                      const sourceBadge = getSourceBadge(entry.source)
+                      return (
+                        <tr key={entry.id} className="hover:bg-gray-700/50">
+                          <td className="py-3 px-4 text-sm text-gray-300">{format(new Date(entry.date), 'MMM d, yyyy')}</td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${sourceBadge.class}`}>{sourceBadge.label}</span>
+                          </td>
+                          <td className="py-3 px-4 text-sm text-white font-medium">{entry.hours}h</td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-1 rounded text-xs font-medium ${getQualityColor(entry.qualityScore)}`}>
+                              {entry.qualityScore}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-sm text-gray-300 max-w-md">
+                            {entry.ticketSummary && (
+                              <div className="text-xs text-gray-500 mb-1">Ticket: {entry.ticketSummary.substring(0, 50)}...</div>
+                            )}
+                            <div className="truncate" title={entry.notes}>{entry.notes || <span className="text-red-400 italic">No notes</span>}</div>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {displayEntries.length > 50 && (
+              <div className="p-4 text-center text-gray-400 text-sm border-t border-gray-700">
+                Showing 50 of {displayEntries.length} entries
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Sidebar (Legend) */}
+        <div className="space-y-6">
+          <div className="bg-gray-800 rounded-lg p-6 sticky top-6">
+            <h3 className="text-lg font-bold text-white mb-4">Quality Legend</h3>
+
+            <div className="space-y-4 mb-6">
+              <div className="flex items-start gap-3">
+                <div className="w-3 h-3 rounded-full bg-green-500 mt-1.5 shrink-0" />
+                <div>
+                  <div className="font-semibold text-green-400">Excellent (80-100)</div>
+                  <p className="text-xs text-gray-400">Detailed, actionable notes with clear context and resolution.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="w-3 h-3 rounded-full bg-blue-500 mt-1.5 shrink-0" />
+                <div>
+                  <div className="font-semibold text-blue-400">Good (60-79)</div>
+                  <p className="text-xs text-gray-400">Adequate length (&gt;50 chars), includes action verbs and basic context.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="w-3 h-3 rounded-full bg-yellow-500 mt-1.5 shrink-0" />
+                <div>
+                  <div className="font-semibold text-yellow-400">Fair (40-59)</div>
+                  <p className="text-xs text-gray-400">Short or lacking detail. May be missing problem or resolution.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="w-3 h-3 rounded-full bg-red-500 mt-1.5 shrink-0" />
+                <div>
+                  <div className="font-semibold text-red-400">Poor (&lt;40)</div>
+                  <p className="text-xs text-gray-400">Very short, missing key actions, or no notes at all.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-gray-700 pt-6">
+              <h4 className="font-semibold text-white mb-3 text-sm">How Scoring Works</h4>
+              <ul className="space-y-3">
+                <li className="text-xs text-gray-400">
+                  <strong className="text-gray-300 block mb-0.5">Completeness (30%)</strong>
+                  Did you state the <span className="text-blue-300">Problem</span> and the <span className="text-green-300">Resolution</span>?
+                </li>
+                <li className="text-xs text-gray-400">
+                  <strong className="text-gray-300 block mb-0.5">Actionability (25%)</strong>
+                  Did you use verbs like <em>Installed, Fixed, Updated, Created</em>?
+                </li>
+                <li className="text-xs text-gray-400">
+                  <strong className="text-gray-300 block mb-0.5">Context (25%)</strong>
+                  Did you mention <em>Servers, Users, Ticket IDs</em>?
+                </li>
+                <li className="text-xs text-gray-400">
+                  <strong className="text-gray-300 block mb-0.5">Length (20%)</strong>
+                  Is the note detailed enough? (&gt;50 chars recommended)
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )
