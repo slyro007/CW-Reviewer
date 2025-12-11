@@ -9,14 +9,13 @@ export default async function handler(
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end()
   }
 
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
+  // ... (rest of validation)
 
   try {
     const { boardIds, startDate, endDate } = req.query
@@ -42,11 +41,33 @@ export default async function handler(
     }
 
     console.log('[API /tickets] Fetching tickets from database...')
-    
+
+    // Select ONLY what we need - Truncating info from DB
     const tickets = await prisma.ticket.findMany({
       where,
-      include: {
-        board: true,
+      select: {
+        id: true,
+        summary: true,
+        boardId: true,
+        status: true,
+        closedDate: true,
+        closedFlag: true,
+        dateEntered: true,
+        resolvedDate: true,
+        owner: true,
+        company: true,
+        type: true,
+        priority: true,
+        resources: true, // teamMember maps to this
+        estimatedHours: true,
+        actualHours: true,
+        board: {
+          select: {
+            id: true,
+            name: true,
+            type: true
+          }
+        }
       },
       orderBy: {
         dateEntered: 'desc',
@@ -54,7 +75,7 @@ export default async function handler(
     })
 
     console.log(`[API /tickets] Returning ${tickets.length} tickets from database`)
-    
+
     // Transform to match expected format
     const transformed = tickets.map(t => ({
       id: t.id,

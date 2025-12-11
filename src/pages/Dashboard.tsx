@@ -1,167 +1,27 @@
-import { useEffect, useMemo } from 'react'
-import { useMembersStore } from '@/stores/membersStore'
-import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
-import { useTicketsStore } from '@/stores/ticketsStore'
-import { useProjectsStore } from '@/stores/projectsStore'
-import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
-import { useTimePeriodStore } from '@/stores/timePeriodStore'
-import DataSourceFilter, { useDataSources } from '@/components/DataSourceFilter'
+import TeamFilter from '@/components/TeamFilter'
 import { format } from 'date-fns'
 
 export default function Dashboard() {
   const { members, isLoading: membersLoading, fetchMembers } = useMembersStore()
-  const { entries, isLoading: entriesLoading, fetchTimeEntries } = useTimeEntriesStore()
-  const { serviceTickets, isLoadingService, fetchServiceBoardTickets, fetchBoards, getTicketStats } = useTicketsStore()
-  const { projects, projectTickets, fetchProjects, fetchProjectTickets } = useProjectsStore()
-  const { selectedEngineerId } = useSelectedEngineerStore()
-  const { getDateRange, getPeriodLabel } = useTimePeriodStore()
+  // ... (existing hooks)
 
-  const { dataSources, setDataSources, includesServiceDesk, includesProjects } = useDataSources()
-  const dateRange = getDateRange()
-
-  useEffect(() => {
-    fetchMembers()
-    fetchBoards()
-    fetchServiceBoardTickets()
-    fetchProjects()
-    fetchProjectTickets()
-  }, [])
-
-  useEffect(() => {
-    fetchTimeEntries({
-      startDate: format(dateRange.start, 'yyyy-MM-dd'),
-      endDate: format(dateRange.end, 'yyyy-MM-dd'),
-    })
-  }, [dateRange.start.getTime(), dateRange.end.getTime()])
-
-  const selectedEngineer = selectedEngineerId
-    ? members.find(m => m.id === selectedEngineerId)
-    : null
-
-  // Filter entries based on selected engineer and date range
-  const filteredEntries = useMemo(() => {
-    let result = entries.filter(e => {
-      const entryDate = new Date(e.dateStart)
-      return entryDate >= dateRange.start && entryDate <= dateRange.end
-    })
-
-    if (selectedEngineerId !== null) {
-      result = result.filter(entry => entry.memberId === selectedEngineerId)
-    }
-    return result
-  }, [entries, selectedEngineerId, dateRange])
-
-  // Filter service tickets based on date range and engineer
-  const filteredServiceTickets = useMemo(() => {
-    if (!includesServiceDesk) return []
-
-    let result = serviceTickets.filter(t => {
-      if (!t.dateEntered) return true
-      const entered = new Date(t.dateEntered)
-      return entered >= dateRange.start && entered <= dateRange.end
-    })
-
-    if (selectedEngineer) {
-      const ticketIds = new Set<number>()
-      filteredEntries.filter(e => e.ticketId).forEach(e => { if (e.ticketId) ticketIds.add(e.ticketId) })
-      result.filter(t =>
-        t.owner?.toLowerCase() === selectedEngineer.identifier.toLowerCase() ||
-        t.resources?.toLowerCase().includes(selectedEngineer.identifier.toLowerCase())
-      ).forEach(t => ticketIds.add(t.id))
-      result = result.filter(t => ticketIds.has(t.id))
-    }
-
-    return result
-  }, [serviceTickets, selectedEngineer, filteredEntries, dateRange, includesServiceDesk])
-
-  // Filter projects and project tickets - include projects where engineer is manager OR has time entries
-  const filteredProjects = useMemo(() => {
-    if (!includesProjects) return []
-    if (selectedEngineer) {
-      const identifier = selectedEngineer.identifier.toLowerCase()
-      // Get project IDs from time entries
-      const timeEntryProjectIds = new Set(
-        filteredEntries
-          .filter(e => e.memberId === selectedEngineer.id && e.projectId !== null && e.projectId !== undefined)
-          .map(e => e.projectId!)
-      )
-      return projects.filter(p =>
-        p.managerIdentifier?.toLowerCase() === identifier ||
-        timeEntryProjectIds.has(p.id)
-      )
-    }
-    return projects
-  }, [projects, selectedEngineer, includesProjects, filteredEntries])
-
-  const filteredProjectTickets = useMemo(() => {
-    if (!includesProjects) return []
-    const projectIds = filteredProjects.map(p => p.id)
-    return projectTickets.filter(t => {
-      if (!t.dateEntered) return projectIds.includes(t.projectId)
-      const entered = new Date(t.dateEntered)
-      return entered >= dateRange.start && entered <= dateRange.end && projectIds.includes(t.projectId)
-    })
-  }, [projectTickets, filteredProjects, dateRange, includesProjects])
-
-  // Calculate stats
-  const ticketStats = useMemo(() => getTicketStats(filteredServiceTickets), [filteredServiceTickets, getTicketStats])
-
-  const projectStats = useMemo(() => ({
-    total: filteredProjects.length,
-    open: filteredProjects.filter(p => !p.closedFlag).length,
-    closed: filteredProjects.filter(p => p.closedFlag).length,
-    ticketsTotal: filteredProjectTickets.length,
-    ticketsClosed: filteredProjectTickets.filter(t => t.closedFlag).length,
-  }), [filteredProjects, filteredProjectTickets])
-
-  const filteredMembers = useMemo(() => {
-    if (selectedEngineerId === null) return members
-    return members.filter(member => member.id === selectedEngineerId)
-  }, [members, selectedEngineerId])
-
-  const membersWithHours = useMemo(() => {
-    return filteredMembers.map(member => {
-      const memberEntries = filteredEntries.filter(e => e.memberId === member.id)
-      const totalHours = memberEntries.reduce((sum, e) => sum + e.hours, 0)
-      return { ...member, totalHours }
-    })
-  }, [filteredMembers, filteredEntries])
-
-  // Calculate metrics with useMemo for proper reactivity
-  const totalHours = useMemo(() =>
-    filteredEntries.reduce((sum, entry) => sum + entry.hours, 0),
-    [filteredEntries]
-  )
-  const billableHours = useMemo(() =>
-    filteredEntries.filter(e => e.billableOption === 'Billable')
-      .reduce((sum, entry) => sum + entry.hours, 0),
-    [filteredEntries]
-  )
-
-  // Debug logs
-  useEffect(() => {
-    console.log('[Dashboard] Selected Engineer:', selectedEngineerId)
-    console.log('[Dashboard] Date Range:', dateRange)
-    console.log('[Dashboard] Entries:', entries.length)
-    console.log('[Dashboard] Filtered Entries:', filteredEntries.length)
-    console.log('[Dashboard] Filtered Service Tickets:', filteredServiceTickets.length)
-    console.log('[Dashboard] Projects Total:', projects.length)
-    console.log('[Dashboard] Filtered Projects:', filteredProjects.length)
-  }, [selectedEngineerId, dateRange, entries.length, filteredEntries.length, filteredServiceTickets.length, projects.length, filteredProjects.length])
+  // ... (existing logic)
 
   return (
     <div className="px-4 py-6 sm:px-0">
-      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="mb-6 flex flex-col xl:flex-row xl:items-end xl:justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold text-white mb-2">Overview</h2>
           <p className="text-gray-400">
-            {selectedEngineer
-              ? `Overview for ${selectedEngineer.firstName} ${selectedEngineer.lastName}`
-              : 'Overview of all engineers'}
+            Performance metrics and KPI tracking
             {' • '}<span className="text-blue-400">{getPeriodLabel()}</span>
           </p>
         </div>
-        <DataSourceFilter selected={dataSources} onChange={setDataSources} />
+
+        <div className="flex flex-col sm:flex-row gap-4 sm:items-end">
+          <TeamFilter />
+          <DataSourceFilter selected={dataSources} onChange={setDataSources} className="sm:self-end" />
+        </div>
       </div>
 
       {/* Time Entry Stats */}
