@@ -11,6 +11,7 @@ interface TimeEntriesState {
   isLoading: boolean
   error: string | null
   lastSync: Date | null
+  lastFetchParams: any
   setEntries: (entries: TimeEntry[]) => void
   addEntry: (entry: TimeEntry) => void
   setDateRange: (start: Date | null, end: Date | null) => void
@@ -30,7 +31,8 @@ export const useTimeEntriesStore = create<TimeEntriesState>((set, get) => ({
   },
   isLoading: false,
   error: null,
-  lastSync: null, // Track last successful fetch time
+  lastSync: null,
+  lastFetchParams: null,
 
   setEntries: (entries) => set({ entries, lastSync: new Date() }),
   addEntry: (entry) => set((state) => ({
@@ -50,12 +52,19 @@ export const useTimeEntriesStore = create<TimeEntriesState>((set, get) => ({
   },
 
   fetchTimeEntries: async (params) => {
-    const { isLoading, lastSync } = get()
+    const { isLoading, lastSync, lastFetchParams } = get()
     if (isLoading) return
 
-    // Prevent redundant fetches: If fetching everything (no params) and executed recently (< 5 mins), skip
-    if (!params && lastSync && (new Date().getTime() - lastSync.getTime() < 5 * 60 * 1000)) {
-      console.log('[TimeEntries] Data is fresh, skipping fetch')
+    // Smart Cache Check:
+    // 1. Data is fresh (< 5 mins)
+    // 2. Params match last fetch OR no params AND last fetch was full (no params)
+    const isFresh = lastSync && (new Date().getTime() - lastSync.getTime() < 5 * 60 * 1000)
+    const paramsMatch = JSON.stringify(params || {}) === JSON.stringify(lastFetchParams || {})
+
+    // If fetching full data (no params) but we already have full data (lastFetchParams was null/empty), it matches.
+    // If fetching specific range, and it matches last specific range, it matches.
+    if (isFresh && paramsMatch) {
+      console.log('[TimeEntries] Data is fresh & params match, skipping fetch')
       return
     }
 
@@ -78,7 +87,7 @@ export const useTimeEntriesStore = create<TimeEntriesState>((set, get) => ({
         updatedAt: e.updatedAt ? new Date(e.updatedAt) : undefined
       }))
 
-      set({ entries, isLoading: false, lastSync: new Date() })
+      set({ entries, isLoading: false, lastSync: new Date(), lastFetchParams: params || {} })
       console.log(`✅ Fetched ${entries.length} time entries`)
     } catch (error: any) {
       console.error('Error fetching time entries:', error)
