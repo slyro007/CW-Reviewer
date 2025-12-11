@@ -7,18 +7,8 @@ import { useTimePeriodStore } from '@/stores/timePeriodStore'
 import { api } from '@/lib/api'
 import { format } from 'date-fns'
 import {
-  Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend
+  Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip
 } from 'recharts'
-
-interface CategoryScore {
-  name: string
-  score: number
-  maxScore: number
-  color: string
-  issues: string[]
-  recommendations: string[]
-}
 
 interface AIAnalysisResult {
   summary: string
@@ -74,63 +64,6 @@ export default function PerformanceReview() {
 
     return result
   }, [entries, selectedEngineerId, dateRange])
-
-  // Calculate generic scores (Legacy/Fallback Logic)
-  const categoryScores = useMemo((): CategoryScore[] => {
-    const totalHours = filteredEntries.reduce((sum, e) => sum + e.hours, 0)
-    const billableHours = filteredEntries
-      .filter(e => e.billableOption === 'Billable')
-      .reduce((sum, e) => sum + e.hours, 0)
-    const billablePercent = totalHours > 0 ? (billableHours / totalHours) * 100 : 0
-
-    const withNotes = filteredEntries.filter(e => e.notes && e.notes.trim().length > 0)
-    const notesPercent = filteredEntries.length > 0
-      ? (withNotes.length / filteredEntries.length) * 100
-      : 0
-    const avgNoteLength = withNotes.length > 0
-      ? withNotes.reduce((sum, e) => sum + (e.notes?.length || 0), 0) / withNotes.length
-      : 0
-
-    const uniqueTicketIds = new Set(filteredEntries.filter(e => e.ticketId).map(e => e.ticketId))
-    const workedTickets = tickets.filter(t => uniqueTicketIds.has(t.id))
-    const closedTickets = workedTickets.filter(t => t.closedFlag)
-
-    const daysInPeriod = Math.max(1, Math.ceil((dateRange.end.getTime() - dateRange.start.getTime()) / (1000 * 60 * 60 * 24)))
-    const avgHoursPerDay = totalHours / daysInPeriod
-
-    const scores: CategoryScore[] = []
-
-    // Time Tracking
-    const timeTrackingScore = Math.min(100, Math.round(
-      (avgHoursPerDay >= 6 ? 40 : (avgHoursPerDay / 6) * 40) +
-      (filteredEntries.length >= daysInPeriod * 0.7 ? 30 : (filteredEntries.length / (daysInPeriod * 0.7)) * 30) +
-      (totalHours > 0 ? 30 : 0)
-    ))
-    scores.push({
-      name: 'Time Tracking',
-      score: timeTrackingScore,
-      maxScore: 100,
-      color: 'blue',
-      issues: avgHoursPerDay < 6 ? [`Avg ${avgHoursPerDay.toFixed(1)}h/day < 6h target`] : [],
-      recommendations: [],
-    })
-
-    // Notes
-    const notesScore = Math.min(100, Math.round(
-      (notesPercent >= 90 ? 50 : (notesPercent / 90) * 50) +
-      (avgNoteLength >= 50 ? 50 : (avgNoteLength / 50) * 50)
-    ))
-    scores.push({
-      name: 'Notes Quality',
-      score: notesScore,
-      maxScore: 100,
-      color: 'purple',
-      issues: notesPercent < 80 ? [`${notesPercent.toFixed(0)}% notes notes present`] : [],
-      recommendations: [],
-    })
-
-    return scores
-  }, [filteredEntries, tickets, dateRange])
 
 
   // Generate AI Review
@@ -210,8 +143,8 @@ export default function PerformanceReview() {
           onClick={generateAIReview}
           disabled={isGeneratingReview}
           className={`px-6 py-3 rounded-lg font-medium transition-all shadow-lg flex items-center gap-2 ${isGeneratingReview
-              ? 'bg-gray-700 text-gray-400 cursor-wait'
-              : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white hover:scale-105'
+            ? 'bg-gray-700 text-gray-400 cursor-wait'
+            : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white hover:scale-105'
             }`}
         >
           {isGeneratingReview ? (
