@@ -50,8 +50,14 @@ export const useTimeEntriesStore = create<TimeEntriesState>((set, get) => ({
   },
 
   fetchTimeEntries: async (params) => {
-    const { isLoading } = get()
+    const { isLoading, lastSync } = get()
     if (isLoading) return
+
+    // Prevent redundant fetches: If fetching everything (no params) and executed recently (< 5 mins), skip
+    if (!params && lastSync && (new Date().getTime() - lastSync.getTime() < 5 * 60 * 1000)) {
+      console.log('[TimeEntries] Data is fresh, skipping fetch')
+      return
+    }
 
     set({ isLoading: true, error: null })
     try {

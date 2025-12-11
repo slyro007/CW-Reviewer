@@ -70,8 +70,14 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
   setError: (error) => set({ error }),
 
   fetchTickets: async (params) => {
-    const { isLoading } = get()
+    const { isLoading, lastSync } = get()
     if (isLoading) return
+
+    // Prevent redundant fetches (5 min cache)
+    if (!params && lastSync && (new Date().getTime() - lastSync.getTime() < 5 * 60 * 1000)) {
+      console.log('[Tickets] Data is fresh, skipping fetch')
+      return
+    }
 
     set({ isLoading: true, error: null })
     try {
@@ -199,8 +205,14 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
 
   // Fetch only tickets from "Project Board"
   fetchProjectBoardTickets: async () => {
-    const { isLoading, projectBoardId } = get()
+    const { isLoading, projectBoardId, lastSync } = get()
     if (isLoading) return
+
+    // Prevent redundant fetches (5 min cache)
+    if (lastSync && (new Date().getTime() - lastSync.getTime() < 5 * 60 * 1000)) {
+      console.log('[Project Board Tickets] Data is fresh, skipping fetch')
+      return
+    }
 
     // If we don't have the board ID yet, fetch boards first
     if (!projectBoardId) {
@@ -240,7 +252,7 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
         actualHours: t.actualHours || undefined,
       }))
 
-      set({ tickets, isLoading: false })
+      set({ tickets, isLoading: false, lastSync: new Date() })
       console.log(`✅ Fetched ${tickets.length} tickets from "${PROJECT_BOARD_NAME}"`)
     } catch (error: any) {
       console.error('Error fetching project board tickets:', error)
@@ -250,8 +262,14 @@ export const useTicketsStore = create<TicketsState>((set, get) => ({
 
   // Fetch tickets from service boards only
   fetchServiceBoardTickets: async () => {
-    const { isLoadingService, serviceBoardIds } = get()
+    const { isLoadingService, serviceBoardIds, lastServiceSync } = get()
     if (isLoadingService) return
+
+    // Prevent redundant fetches (5 min cache)
+    if (lastServiceSync && (new Date().getTime() - lastServiceSync.getTime() < 5 * 60 * 1000)) {
+      console.log('[Service Tickets] Data is fresh, skipping fetch')
+      return
+    }
 
     // If we don't have the board IDs yet, fetch boards first
     if (serviceBoardIds.length === 0) {

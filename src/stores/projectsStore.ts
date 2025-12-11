@@ -62,8 +62,14 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
   setError: (error) => set({ error }),
 
   fetchProjects: async (managerIds) => {
-    const { isLoading } = get()
+    const { isLoading, lastProjectSync } = get()
     if (isLoading) return
+
+    // Prevent redundant fetches (5 min cache)
+    if (!managerIds && lastProjectSync && (new Date().getTime() - lastProjectSync.getTime() < 5 * 60 * 1000)) {
+      console.log('[Projects] Data is fresh, skipping fetch')
+      return
+    }
 
     set({ isLoading: true, error: null })
     try {
@@ -109,19 +115,19 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
 
     set({ isLoading: true })
     try {
-      console.log(`[Projects Store] Syncing updates since ${lastProjectSync.toISOString()}...`)
+      console.log(`[Projects] Syncing updates since ${lastProjectSync.toISOString()}...`)
       const data = await api.getProjects({
-        managerIdentifier: managerIds?.join(','), // Map array to string param if needed, api.ts handles distinct params
+        managerIdentifier: managerIds ? managerIds.join(',') : undefined,
         modifiedSince: lastProjectSync.toISOString()
       })
 
       if (data.length === 0) {
-        console.log('[Projects Store] No updates found')
+        console.log('[Projects] No updates found')
         set({ isLoading: false, lastProjectSync: new Date() })
         return
       }
 
-      const updates: Project[] = data.map((p: any) => ({
+      const newProjects: Project[] = data.map((p: any) => ({
         id: p.id,
         name: p.name || '',
         status: p.status?.name || 'Unknown',
@@ -142,25 +148,33 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
         updatedAt: p.updatedAt ? new Date(p.updatedAt) : undefined,
       }))
 
-      // Merge
-      const map = new Map(projects.map(p => [p.id, p]))
-      updates.forEach(u => map.set(u.id, u))
+      let updatedProjects = [...projects]
+      newProjects.forEach(newP => {
+        const idx = updatedProjects.findIndex(p => p.id === newP.id)
+        if (idx >= 0) {
+          updatedProjects[idx] = newP
+        } else {
+          updatedProjects.push(newP)
+        }
+      })
+      set({ projects: updatedProjects, isLoading: false, lastProjectSync: new Date() })
+      console.log(`✅ Synced ${newProjects.length} projects`)
 
-      const merged = Array.from(map.values())
-      // Sort
-      merged.sort((a, b) => a.name.localeCompare(b.name))
-
-      set({ projects: merged, isLoading: false, lastProjectSync: new Date() })
-      console.log(`✅ Synced ${updates.length} project updates`)
     } catch (error: any) {
       console.error('Error syncing projects:', error)
-      set({ isLoading: false })
+      set({ error: error.message, isLoading: false })
     }
   },
 
   fetchProjectTickets: async (projectId) => {
-    const { isLoadingTickets } = get()
+    const { isLoadingTickets, lastTicketSync } = get()
     if (isLoadingTickets) return
+
+    // Prevent redundant fetches (5 min cache)
+    if (!projectId && lastTicketSync && (new Date().getTime() - lastTicketSync.getTime() < 5 * 60 * 1000)) {
+      console.log('[Project Tickets] Data is fresh, skipping fetch')
+      return
+    }
 
     set({ isLoadingTickets: true, error: null })
     try {
@@ -170,24 +184,19 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
       const projectTickets: ProjectTicket[] = data.map((t: any) => ({
         id: t.id,
         summary: t.summary || '',
-        projectId: t.project?.id || 0,
-        projectName: t.project?.name || undefined,
-        phaseId: t.phase?.id || undefined,
-        phaseName: t.phase?.name || undefined,
-        boardId: t.board?.id || undefined,
-        boardName: t.board?.name || undefined,
+        projectId: t.projectId || t.project?.id || 0,
+        projectName: t.projectName || t.project?.name || '',
         status: t.status?.name || 'Unknown',
-        company: t.company?.name || undefined,
-        resources: t.resources || undefined,
+        closedDate: t.closedDate ? new Date(t.closedDate) : undefined,
         closedFlag: t.closedFlag || false,
-        priority: t.priority?.name || undefined,
-        type: t.type?.name || undefined,
-        wbsCode: t.wbsCode || undefined,
+        dateEntered: t.dateEntered ? new Date(t.dateEntered) : undefined,
         actualHours: t.actualHours || 0,
         budgetHours: t.budgetHours || 0,
-        dateEntered: t.dateEntered ? new Date(t.dateEntered) : undefined,
-        closedDate: t.closedDate ? new Date(t.closedDate) : undefined,
-        updatedAt: t.updatedAt ? new Date(t.updatedAt) : undefined,
+        estimatedHours: t.budgetHours || 0, // Fallback
+        resources: t.resources || '',
+        boardId: t.boardId || 0,
+        phaseName: t.phaseName || undefined,
+        updatedAt: t.updatedAt ? new Date(t.updatedAt) : undefined
       }))
 
       set({ projectTickets, isLoadingTickets: false, lastTicketSync: new Date() })
