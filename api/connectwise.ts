@@ -211,7 +211,7 @@ class ConnectWiseClient {
    * Fetch all pages of results by automatically paginating through all available pages
    * This is useful when you need ALL records, not just the first 1000
    */
-  private async requestAllPages<T>(
+  async requestAllPages<T>(
     endpoint: string,
     options: RequestOptions = {}
   ): Promise<T[]> {
@@ -380,7 +380,7 @@ class ConnectWiseClient {
       conditions: conditions || undefined,
       orderBy: 'dateEntered desc',
       // Include additional fields: type, priority, owner, company, team members
-      fields: options.fields || 'id,summary,board/id,status/name,closedDate,closedFlag,dateEntered,resolvedDate,type/name,priority/name,owner/identifier,company/name,estimatedHours,actualHours,team/id,teamMember/identifier',
+      fields: options.fields || 'id,summary,board/id,status/name,closedDate,closedFlag,dateEntered,resolvedDate,type/name,priority/name,owner/identifier,company/name,estimatedHours,actualHours,team/id,teamMember/identifier,_info/dateEntered,_info/dateResolved,_info/closedDate',
     })
   }
 
@@ -474,7 +474,7 @@ class ConnectWiseClient {
       conditions: conditions || undefined,
       orderBy: options.orderBy || 'id desc',
       // Include key fields for project ticket analysis
-      fields: options.fields || 'id,summary,project/id,project/name,phase/id,phase/name,board/id,board/name,status/name,company/name,resources,closedFlag,priority/name,type/name,wbsCode,actualHours,budgetHours,dateEntered,closedDate',
+      fields: options.fields || 'id,summary,project/id,project/name,phase/id,phase/name,board/id,board/name,status/name,company/name,resources,closedFlag,priority/name,type/name,wbsCode,actualHours,budgetHours,dateEntered,closedDate,_info/dateEntered,_info/closedDate',
     })
   }
   /**

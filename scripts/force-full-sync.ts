@@ -76,17 +76,21 @@ async function main() {
         .map((b: any) => b.id)
     console.log(`Identified ${serviceBoardIds.length} Service Boards.`)
 
-    // 3. Sync Time Entries (5 Years History)
-    console.log('\n--- Syncing Time Entries (Last 5 Years) ---')
+    const touchedProjectIds = new Set<number>()
+    const touchedTicketIds = new Set<number>()
     const startDate = new Date()
     startDate.setFullYear(startDate.getFullYear() - 5)
+
+    console.log('\n--- Syncing Time Entries (Last 5 Years) ---')
+    // const startDate = new Date()
+    // startDate.setFullYear(startDate.getFullYear() - 5)
     console.log(`Fetching entries since: ${startDate.toISOString()}`)
 
     const timeEntries = await client.getTimeEntries(startDate, undefined, memberIds)
     console.log(`Fetched ${timeEntries.length} time entries.`)
 
-    const touchedProjectIds = new Set<number>()
-    const touchedTicketIds = new Set<number>()
+    // const touchedProjectIds = new Set<number>()
+    // const touchedTicketIds = new Set<number>()
 
     // Process in batches for performance
     console.log(`Processing ${timeEntries.length} entries in batches...`)
@@ -165,6 +169,7 @@ async function main() {
     console.log(`✅ Synced ${validEntries.length} time entries.`)
     console.log(`Found ${touchedProjectIds.size} unique projects via time entries.`)
     console.log(`Found ${touchedTicketIds.size} unique tickets via time entries.`)
+
 
     // 4. Sync Projects
     console.log('\n--- Syncing Projects ---')
@@ -257,7 +262,7 @@ async function main() {
         for (let i = 0; i < extraIds.length; i += 50) {
             const chunk = extraIds.slice(i, i + 50)
             const conditions = `id in (${chunk.join(',')})`
-            const extraTickets = await client.requestAllPages('/service/tickets', { conditions })
+            const extraTickets = await client.requestAllPages<any>('/service/tickets', { conditions })
 
             for (const t of extraTickets) {
                 const bId = t.board?.id || t.boardId
@@ -296,10 +301,10 @@ async function main() {
                     summary: ticket.summary,
                     boardId,
                     status: ticket.status?.name || ticket.status,
-                    closedDate: ticket.closedDate ? new Date(ticket.closedDate) : null,
+                    closedDate: ticket.closedDate ? new Date(ticket.closedDate) : (ticket._info?.closedDate ? new Date(ticket._info.closedDate) : null),
                     closedFlag: ticket.closedFlag || false,
-                    dateEntered: ticket.dateEntered ? new Date(ticket.dateEntered) : null,
-                    resolvedDate: ticket.resolvedDate ? new Date(ticket.resolvedDate) : null,
+                    dateEntered: ticket.dateEntered ? new Date(ticket.dateEntered) : (ticket._info?.dateEntered ? new Date(ticket._info.dateEntered) : null),
+                    resolvedDate: ticket.resolvedDate ? new Date(ticket.resolvedDate) : (ticket._info?.dateResolved ? new Date(ticket._info.dateResolved) : null),
                     owner: ticket.owner?.identifier || ticket.owner,
                     company: ticket.company?.name || ticket.company,
                     type: ticket.type?.name || ticket.type,
@@ -312,10 +317,10 @@ async function main() {
                     summary: ticket.summary,
                     boardId,
                     status: ticket.status?.name || ticket.status,
-                    closedDate: ticket.closedDate ? new Date(ticket.closedDate) : null,
+                    closedDate: ticket.closedDate ? new Date(ticket.closedDate) : (ticket._info?.closedDate ? new Date(ticket._info.closedDate) : null),
                     closedFlag: ticket.closedFlag || false,
-                    dateEntered: ticket.dateEntered ? new Date(ticket.dateEntered) : null,
-                    resolvedDate: ticket.resolvedDate ? new Date(ticket.resolvedDate) : null,
+                    dateEntered: ticket.dateEntered ? new Date(ticket.dateEntered) : (ticket._info?.dateEntered ? new Date(ticket._info.dateEntered) : null),
+                    resolvedDate: ticket.resolvedDate ? new Date(ticket.resolvedDate) : (ticket._info?.dateResolved ? new Date(ticket._info.dateResolved) : null),
                     owner: ticket.owner?.identifier || ticket.owner,
                     company: ticket.company?.name || ticket.company,
                     type: ticket.type?.name || ticket.type,
@@ -366,8 +371,8 @@ async function main() {
                         wbsCode: ticket.wbsCode,
                         budgetHours: ticket.budgetHours,
                         actualHours: ticket.actualHours,
-                        dateEntered: ticket.dateEntered ? new Date(ticket.dateEntered) : null,
-                        closedDate: ticket.closedDate ? new Date(ticket.closedDate) : null,
+                        dateEntered: ticket.dateEntered ? new Date(ticket.dateEntered) : (ticket._info?.dateEntered ? new Date(ticket._info.dateEntered) : null),
+                        closedDate: ticket.closedDate ? new Date(ticket.closedDate) : (ticket._info?.closedDate ? new Date(ticket._info.closedDate) : null),
                     },
                     update: {
                         summary: ticket.summary,
@@ -386,8 +391,8 @@ async function main() {
                         wbsCode: ticket.wbsCode,
                         budgetHours: ticket.budgetHours,
                         actualHours: ticket.actualHours,
-                        dateEntered: ticket.dateEntered ? new Date(ticket.dateEntered) : null,
-                        closedDate: ticket.closedDate ? new Date(ticket.closedDate) : null,
+                        dateEntered: ticket.dateEntered ? new Date(ticket.dateEntered) : (ticket._info?.dateEntered ? new Date(ticket._info.dateEntered) : null),
+                        closedDate: ticket.closedDate ? new Date(ticket.closedDate) : (ticket._info?.closedDate ? new Date(ticket._info.closedDate) : null),
                     }
                 })
             }))
