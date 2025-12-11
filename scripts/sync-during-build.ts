@@ -127,18 +127,17 @@ async function performBuildSync() {
       const lastSyncAt = syncLogEntry?.lastSyncAt || null
       const isStale = !lastSyncAt || (now.getTime() - lastSyncAt.getTime() > SYNC_STALE_THRESHOLD_MS)
 
-      // SAFETY CHECK: Enforce minimum sync interval to prevent excessive database calls
+      // SAFETY CHECK: Removed to ensure sync runs on every build (incremental)
+      /* 
       if (lastSyncAt) {
         const timeSinceLastSync = now.getTime() - lastSyncAt.getTime()
         const { MINIMUM_SYNC_INTERVAL_MS } = await import('../api/config.js')
 
         if (timeSinceLastSync < MINIMUM_SYNC_INTERVAL_MS) {
-          const hoursRemaining = ((MINIMUM_SYNC_INTERVAL_MS - timeSinceLastSync) / (1000 * 60 * 60)).toFixed(1)
-          log(`⏸️  Skipping ${entityType} - synced ${(timeSinceLastSync / (1000 * 60 * 60)).toFixed(1)}h ago. Minimum interval: 6h. Try again in ${hoursRemaining}h.`)
-          results.push({ entity: entityType, synced: false, count: 0, message: `Skipped - minimum interval not met (${hoursRemaining}h remaining)` })
-          continue
+             // Removed to allow incremental sync on every build
         }
       }
+      */
 
       // Determine sync mode
       const isIncrementalSync = Boolean(lastSyncAt && !['members', 'boards'].includes(entityType))

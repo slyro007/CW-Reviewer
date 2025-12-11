@@ -15,7 +15,7 @@ export default function Dashboard() {
   const { projects, projectTickets, fetchProjects, fetchProjectTickets } = useProjectsStore()
   const { selectedEngineerId } = useSelectedEngineerStore()
   const { getDateRange, getPeriodLabel } = useTimePeriodStore()
-  
+
   const { dataSources, setDataSources, includesServiceDesk, includesProjects } = useDataSources()
   const dateRange = getDateRange()
 
@@ -34,7 +34,7 @@ export default function Dashboard() {
     })
   }, [dateRange.start.getTime(), dateRange.end.getTime()])
 
-  const selectedEngineer = selectedEngineerId 
+  const selectedEngineer = selectedEngineerId
     ? members.find(m => m.id === selectedEngineerId)
     : null
 
@@ -44,7 +44,7 @@ export default function Dashboard() {
       const entryDate = new Date(e.dateStart)
       return entryDate >= dateRange.start && entryDate <= dateRange.end
     })
-    
+
     if (selectedEngineerId !== null) {
       result = result.filter(entry => entry.memberId === selectedEngineerId)
     }
@@ -54,7 +54,7 @@ export default function Dashboard() {
   // Filter service tickets based on date range and engineer
   const filteredServiceTickets = useMemo(() => {
     if (!includesServiceDesk) return []
-    
+
     let result = serviceTickets.filter(t => {
       if (!t.dateEntered) return true
       const entered = new Date(t.dateEntered)
@@ -64,7 +64,7 @@ export default function Dashboard() {
     if (selectedEngineer) {
       const ticketIds = new Set<number>()
       filteredEntries.filter(e => e.ticketId).forEach(e => { if (e.ticketId) ticketIds.add(e.ticketId) })
-      result.filter(t => 
+      result.filter(t =>
         t.owner?.toLowerCase() === selectedEngineer.identifier.toLowerCase() ||
         t.resources?.toLowerCase().includes(selectedEngineer.identifier.toLowerCase())
       ).forEach(t => ticketIds.add(t.id))
@@ -85,7 +85,7 @@ export default function Dashboard() {
           .filter(e => e.memberId === selectedEngineer.id && e.projectId !== null && e.projectId !== undefined)
           .map(e => e.projectId!)
       )
-      return projects.filter(p => 
+      return projects.filter(p =>
         p.managerIdentifier?.toLowerCase() === identifier ||
         timeEntryProjectIds.has(p.id)
       )
@@ -105,7 +105,7 @@ export default function Dashboard() {
 
   // Calculate stats
   const ticketStats = useMemo(() => getTicketStats(filteredServiceTickets), [filteredServiceTickets, getTicketStats])
-  
+
   const projectStats = useMemo(() => ({
     total: filteredProjects.length,
     open: filteredProjects.filter(p => !p.closedFlag).length,
@@ -128,15 +128,26 @@ export default function Dashboard() {
   }, [filteredMembers, filteredEntries])
 
   // Calculate metrics with useMemo for proper reactivity
-  const totalHours = useMemo(() => 
+  const totalHours = useMemo(() =>
     filteredEntries.reduce((sum, entry) => sum + entry.hours, 0),
     [filteredEntries]
   )
-  const billableHours = useMemo(() => 
+  const billableHours = useMemo(() =>
     filteredEntries.filter(e => e.billableOption === 'Billable')
       .reduce((sum, entry) => sum + entry.hours, 0),
     [filteredEntries]
   )
+
+  // Debug logs
+  useEffect(() => {
+    console.log('[Dashboard] Selected Engineer:', selectedEngineerId)
+    console.log('[Dashboard] Date Range:', dateRange)
+    console.log('[Dashboard] Entries:', entries.length)
+    console.log('[Dashboard] Filtered Entries:', filteredEntries.length)
+    console.log('[Dashboard] Filtered Service Tickets:', filteredServiceTickets.length)
+    console.log('[Dashboard] Projects Total:', projects.length)
+    console.log('[Dashboard] Filtered Projects:', filteredProjects.length)
+  }, [selectedEngineerId, dateRange, entries.length, filteredEntries.length, filteredServiceTickets.length, projects.length, filteredProjects.length])
 
   return (
     <div className="px-4 py-6 sm:px-0">
@@ -144,7 +155,7 @@ export default function Dashboard() {
         <div>
           <h2 className="text-3xl font-bold text-white mb-2">Overview</h2>
           <p className="text-gray-400">
-            {selectedEngineer 
+            {selectedEngineer
               ? `Overview for ${selectedEngineer.firstName} ${selectedEngineer.lastName}`
               : 'Overview of all engineers'}
             {' • '}<span className="text-blue-400">{getPeriodLabel()}</span>
