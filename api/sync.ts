@@ -9,12 +9,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import prisma from './db.js'
 import ConnectWiseClient from './connectwise.js'
-import {
-  ALLOWED_ENGINEER_IDENTIFIERS,
-  SERVICE_BOARD_NAMES,
-  SYNC_STALE_THRESHOLD_MS,
-  SYNC_INCREMENTAL_FALLBACK
-} from './config.js'
+import { ALLOWED_ENGINEER_IDENTIFIERS, INACTIVE_ENGINEERS, SERVICE_BOARD_NAMES, MINIMUM_SYNC_INTERVAL_MS, SYNC_STALE_THRESHOLD_MS, SYNC_INCREMENTAL_FALLBACK } from './config.js'
 
 interface SyncStatus {
   entity: string
@@ -266,9 +261,10 @@ async function syncMembers(client: any): Promise<{ count: number; memberIds: num
   console.log('[Sync] Fetching members from ConnectWise...')
   const allMembers = await client.getMembers()
 
-  // Filter to only the 7 allowed engineers
+  // Filter to only the allowed engineers (case-insensitive)
+  const allowedSet = new Set(ALLOWED_ENGINEER_IDENTIFIERS.map(id => id.toLowerCase()))
   const allowedMembers = allMembers.filter((m: any) =>
-    ALLOWED_ENGINEER_IDENTIFIERS.includes(m.identifier?.toLowerCase())
+    m.identifier && allowedSet.has(m.identifier.toLowerCase())
   )
 
   console.log(`[Sync] Found ${allMembers.length} total members, filtering to ${allowedMembers.length} allowed engineers`)
@@ -277,6 +273,16 @@ async function syncMembers(client: any): Promise<{ count: number; memberIds: num
 
   for (const member of allowedMembers) {
     memberIds.push(member.id)
+
+    // Lookup manual dates if available
+    const inactiveInfo = INACTIVE_ENGINEERS.find(e => e.identifier.toLowerCase() === member.identifier.toLowerCase())
+    const startDate = inactiveInfo ? new Date(inactiveInfo.startDate) : null
+    const endDate = inactiveInfo ? new Date(inactiveInfo.endDate) : null
+
+    // Determine strict active status
+    // If they are in the INACTIVE list, they are inactive. Otherwise check CW flag.
+    const isActive = inactiveInfo ? false : (!member.inactiveFlag)
+
     await prisma.member.upsert({
       where: { id: member.id },
       create: {
@@ -286,6 +292,9 @@ async function syncMembers(client: any): Promise<{ count: number; memberIds: num
         lastName: member.lastName,
         email: member.emailAddress,
         inactiveFlag: member.inactiveFlag || false,
+        startDate,
+        endDate,
+        isActive
       },
       update: {
         identifier: member.identifier,
@@ -293,6 +302,9 @@ async function syncMembers(client: any): Promise<{ count: number; memberIds: num
         lastName: member.lastName,
         email: member.emailAddress,
         inactiveFlag: member.inactiveFlag || false,
+        startDate,
+        endDate,
+        isActive
       }
     })
   }

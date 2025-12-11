@@ -22,16 +22,17 @@ export default async function handler(
 
     // Select ONLY what we need - Truncating info from DB
     const members = await prisma.member.findMany({
-      where: {
-        inactiveFlag: false,
-      },
+      // Fetch all members (active and inactive)
       select: {
         id: true,
         identifier: true,
         firstName: true,
         lastName: true,
         email: true,
-        inactiveFlag: true
+        inactiveFlag: true,
+        startDate: true,
+        endDate: true,
+        isActive: true
       },
       orderBy: {
         firstName: 'asc',
@@ -48,6 +49,9 @@ export default async function handler(
       lastName: m.lastName || '',
       email: m.email || '',
       inactiveFlag: m.inactiveFlag,
+      isActive: m.isActive,
+      startDate: m.startDate,
+      endDate: m.endDate,
     }))
 
     return res.status(200).json(transformed)

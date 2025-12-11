@@ -40,6 +40,9 @@ model Member {
   lastName        String?
   email           String?
   inactiveFlag    Boolean  @default(false)
+  isActive        Boolean  @default(true) // Helper based on dates
+  startDate       DateTime?
+  endDate         DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

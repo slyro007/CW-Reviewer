@@ -374,6 +374,63 @@ export default function Notes() {
               </ul>
             </div>
           </div>
+
+          {/* Employee History Legend */}
+          <div className="bg-gray-800 rounded-lg p-6 sticky top-[32rem]">
+            <h3 className="text-lg font-bold text-white mb-4">Employee History</h3>
+
+            <div className="space-y-6">
+              <div>
+                <h4 className="text-sm font-semibold text-green-400 uppercase tracking-wider mb-3">Active Team</h4>
+                <div className="space-y-2">
+                  {[
+                    { name: 'Bryan Wolff', range: '2009 - Present' },
+                    { name: 'Shyanne Cano', range: '2020 - Present' },
+                    { name: 'Ezekiel Hammond', range: '2023 - Present' },
+                    { name: 'Philip Counts', range: '2023 - Present' },
+                    { name: 'Daniel Solomon', range: '2023 - Present' },
+                    { name: 'Kevin Moreno', range: '2024 - Present' },
+                    { name: 'Daniel Cooper', range: '2024 - Present' },
+                  ].map(emp => (
+                    <div key={emp.name} className="flex justify-between items-baseline text-xs">
+                      <span className="text-gray-300 font-medium">{emp.name}</span>
+                      <span className="text-gray-500">{emp.range}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Past Employees</h4>
+                <div className="space-y-2">
+                  {[
+                    { name: 'Cheyanne Corder', range: 'Aug 2023 - Dec 2025' },
+                    { name: 'Phillip Ernst', range: 'Nov 2022 - Oct 2025' },
+                    { name: 'Joy Flynn', range: 'Jul 2019 - Sep 2025' },
+                    { name: 'Brent Smith', range: 'Sep 2015 - Sep 2025' },
+                    { name: 'Srujan Jalagam', range: 'May 2025 - Jul 2025' },
+                    { name: 'Austin Day', range: 'Nov 2024 - Apr 2025' },
+                    { name: 'Jason Flynn', range: 'Apr 2021 - Sep 2022' },
+                    { name: 'Jeremy Knee', range: 'Sep 2021 - Jul 2022' },
+                    { name: 'Jonothon Vercher', range: 'May 2020 - Feb 2022' },
+                    { name: 'Margaret Jacobson', range: 'Aug 2021 - Jan 2022' },
+                    { name: 'Ryan Pinto', range: 'Aug 2019 - Oct 2021' },
+                    { name: 'Frank Flores', range: 'Feb 2021 - Oct 2021' },
+                    { name: 'Ethan Montgomery', range: 'May 2021 - Dec 2021' },
+                    { name: 'Erin Korzeniewski', range: 'Sep 2020 - May 2021' },
+                    { name: 'John Britt', range: 'May 2018 - Jul 2019' },
+                    { name: 'Kyle Roberson', range: 'Oct 2022 - Aug 2024' },
+                    { name: 'Gloria Walker', range: 'Jan 2024 - Apr 2024' },
+                  ].map(emp => (
+                    <div key={emp.name} className="flex justify-between items-baseline text-xs">
+                      <span className="text-gray-400 font-medium">{emp.name}</span>
+                      <span className="text-gray-600">{emp.range}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

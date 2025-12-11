@@ -21,7 +21,7 @@ interface RequestOptions {
   fields?: string // For partial field responses to reduce payload size
 }
 
-class ConnectWiseClient {
+export class ConnectWiseClient {
   private config: ConnectWiseConfig
   private codebase: string | null = null
 
@@ -105,7 +105,7 @@ class ConnectWiseClient {
     return 'v4_6_release/'
   }
 
-  private async request<T>(
+  async request<T>(
     endpoint: string,
     options: RequestOptions = {}
   ): Promise<T> {
@@ -259,7 +259,8 @@ class ConnectWiseClient {
    * Fetch members (engineers) - basic info and identifiers only
    */
   async getMembers(options: RequestOptions = {}): Promise<any[]> {
-    const conditions = 'inactiveFlag=false'
+    // Fetch both active and inactive members to support historical data analysis
+    const conditions = 'inactiveFlag=false OR inactiveFlag=true'
     return this.requestAllPages<any[]>('/system/members', {
       ...options,
       conditions: options.conditions

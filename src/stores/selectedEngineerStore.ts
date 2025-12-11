@@ -5,7 +5,13 @@ export const TEAM_DEFINITIONS = {
   'Service Desk': ['dcooper', 'scano', 'kmoreno'],
   'Professional Services': ['ehammond', 'dsolomon'],
   'Professional Services + Management': ['bwolff', 'pcounts', 'ehammond', 'dsolomon'],
-  'Management': ['bwolff', 'pcounts']
+  'Management': ['bwolff', 'pcounts'],
+  'Past Employees': [
+    'CCorder', 'PErnst', 'JFlynn', 'BJSmith', 'sjalagam', 'ADay',
+    'JAFlynn', 'JKnee', 'JVerchr', 'MJacobson', 'RPinto',
+    'fflores', 'eMontgomery', 'ekorzeniewski', 'JBritt',
+    'KRoberson', 'Gwalker'
+  ]
 }
 
 export type TeamName = keyof typeof TEAM_DEFINITIONS

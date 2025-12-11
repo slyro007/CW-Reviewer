@@ -4,8 +4,8 @@
  * Configuration values used by API routes
  */
 
-// Only these 7 engineers should have data synced (case-insensitive)
-export const ALLOWED_ENGINEER_IDENTIFIERS = [
+// Active Team Members
+export const ACTIVE_ENGINEERS = [
   'bwolff',    // Bryan Wolff
   'kmoreno',   // Kevin Moreno
   'scano',     // Shyanne Johnson-Cano
@@ -13,6 +13,34 @@ export const ALLOWED_ENGINEER_IDENTIFIERS = [
   'ehammond',  // Ezekiel Hammond
   'dcooper',   // Daniel Cooper
   'dsolomon',  // Daniel Solomon
+]
+
+// Inactive/Former Members (for historical data)
+export const INACTIVE_ENGINEERS: { identifier: string; name: string; startDate: string; endDate: string }[] = [
+  { identifier: 'CCorder', name: 'Cheyanne Corder', startDate: '2023-08-26', endDate: '2025-12-05' },
+  { identifier: 'PErnst', name: 'Phillip Ernst', startDate: '2022-11-15', endDate: '2025-10-06' },
+  { identifier: 'JFlynn', name: 'Joy Flynn', startDate: '2019-07-16', endDate: '2025-09-16' },
+  { identifier: 'BJSmith', name: 'Brent Smith', startDate: '2015-09-04', endDate: '2025-09-03' },
+  { identifier: 'sjalagam', name: 'Srujan Jalagam', startDate: '2025-05-27', endDate: '2025-07-18' },
+  { identifier: 'ADay', name: 'Austin Day', startDate: '2024-11-18', endDate: '2025-04-03' },
+  { identifier: 'JAFlynn', name: 'Jason Flynn', startDate: '2021-04-19', endDate: '2022-09-09' },
+  { identifier: 'JKnee', name: 'Jeremy Knee', startDate: '2021-09-13', endDate: '2022-07-01' },
+  { identifier: 'JVerchr', name: 'Jonothon Vercher', startDate: '2020-05-18', endDate: '2022-02-22' },
+  { identifier: 'MJacobson', name: 'Margaret Jacobson', startDate: '2021-08-02', endDate: '2022-01-28' },
+  { identifier: 'RPinto', name: 'Ryan Pinto', startDate: '2019-08-05', endDate: '2021-10-14' },
+  { identifier: 'fflores', name: 'Frank Flores', startDate: '2021-02-01', endDate: '2021-10-15' },
+  { identifier: 'eMontgomery', name: 'Ethan Montgomery', startDate: '2021-05-27', endDate: '2021-12-08' },
+  { identifier: 'ekorzeniewski', name: 'Erin Korzeniewski', startDate: '2020-09-08', endDate: '2021-05-28' },
+  { identifier: 'JBritt', name: 'John Britt', startDate: '2018-05-21', endDate: '2019-07-23' },
+  { identifier: 'KRoberson', name: 'Kyle Roberson', startDate: '2022-10-03', endDate: '2024-08-16' },
+  { identifier: 'Gwalker', name: 'Gloria Walker', startDate: '2024-01-29', endDate: '2024-04-18' },
+  // Adding others from the "inactive employees" list provided by user if identifiers match
+]
+
+// Combined list for Sync filtering
+export const ALLOWED_ENGINEER_IDENTIFIERS = [
+  ...ACTIVE_ENGINEERS,
+  ...INACTIVE_ENGINEERS.map(e => e.identifier)
 ]
 
 // Service board names to sync

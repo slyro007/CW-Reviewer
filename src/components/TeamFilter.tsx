@@ -1,4 +1,4 @@
-
+import { format } from 'date-fns'
 import { useMembersStore } from '@/stores/membersStore'
 import { useSelectedEngineerStore, TEAM_DEFINITIONS, type TeamName } from '@/stores/selectedEngineerStore'
 
@@ -17,6 +17,9 @@ export default function TeamFilter() {
         return teamIdentifiers?.some(id => id.toLowerCase() === member.identifier.toLowerCase())
     })
 
+    // Sort logic? Active first?
+    // availableEngineers.sort(...)
+
     // Handlers
     const handleTeamChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const newTeam = e.target.value as TeamName
@@ -29,6 +32,18 @@ export default function TeamFilter() {
         const value = e.target.value
         // If value is empty string, it means "All Members"
         setSelectedEngineer(value ? parseInt(value) : null)
+    }
+
+    const formatMemberLabel = (member: any) => {
+        let label = `${member.firstName} ${member.lastName}`
+
+        // Show dates if inactive or has specific range data
+        if (!member.isActive && member.startDate) {
+            const start = format(new Date(member.startDate), 'MMM yyyy')
+            const end = member.endDate ? format(new Date(member.endDate), 'MMM yyyy') : 'Present'
+            label += ` (${start} - ${end})`
+        }
+        return label
     }
 
     return (
@@ -55,12 +70,12 @@ export default function TeamFilter() {
                     id="engineer-select"
                     value={selectedEngineerId === null ? '' : selectedEngineerId}
                     onChange={handleEngineerChange}
-                    className="bg-gray-800 border-gray-700 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 min-w-[150px]"
+                    className="bg-gray-800 border-gray-700 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 min-w-[200px]"
                 >
                     <option value="">All members</option>
                     {availableEngineers.map((member) => (
                         <option key={member.id} value={member.id}>
-                            {member.firstName} {member.lastName}
+                            {formatMemberLabel(member)}
                         </option>
                     ))}
                 </select>

@@ -24,7 +24,7 @@ async function main() {
 
     // 1. Sync Members
     console.log('\n--- Syncing Members ---')
-    const allMembers = await client.getMembers({ conditions: 'inactiveFlag=false' })
+    const allMembers = await client.getMembers({ conditions: 'inactiveFlag=false OR inactiveFlag=true' })
     const allowedMembers = allMembers.filter((m: any) =>
         ALLOWED_ENGINEER_IDENTIFIERS.some(id => id.toLowerCase() === m.identifier?.toLowerCase())
     )

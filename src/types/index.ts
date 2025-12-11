@@ -31,6 +31,9 @@ export interface Member {
   lastName?: string
   email?: string
   inactiveFlag: boolean
+  isActive?: boolean
+  startDate?: Date
+  endDate?: Date
   // Comparison-friendly fields
   totalHours?: number
   billableHours?: number
