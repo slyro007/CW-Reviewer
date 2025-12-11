@@ -9,9 +9,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import prisma from './db.js'
 import ConnectWiseClient from './connectwise.js'
-import { 
-  ALLOWED_ENGINEER_IDENTIFIERS, 
-  SERVICE_BOARD_NAMES, 
+import {
+  ALLOWED_ENGINEER_IDENTIFIERS,
+  SERVICE_BOARD_NAMES,
   SYNC_STALE_THRESHOLD_MS,
   SYNC_INCREMENTAL_FALLBACK
 } from './config.js'
@@ -41,7 +41,7 @@ export default async function handler(
     try {
       const syncLogs = await prisma.syncLog.findMany()
       const now = new Date()
-      
+
       const status = {
         isStale: false,
         lastSync: null as Date | null,
@@ -49,22 +49,22 @@ export default async function handler(
       }
 
       const entityTypes = ['members', 'boards', 'tickets', 'timeEntries', 'projects', 'projectTickets']
-      
+
       for (const entityType of entityTypes) {
         const log = syncLogs.find(l => l.entityType === entityType)
         const lastSync = log?.lastSyncAt || null
         const isStale = !lastSync || (now.getTime() - lastSync.getTime() > SYNC_STALE_THRESHOLD_MS)
-        
+
         status.entities[entityType] = {
           lastSync,
           isStale,
           count: log?.recordCount || 0
         }
-        
+
         if (isStale) {
           status.isStale = true
         }
-        
+
         if (lastSync && (!status.lastSync || lastSync > status.lastSync)) {
           status.lastSync = lastSync
         }
@@ -80,7 +80,7 @@ export default async function handler(
   // POST: Perform sync
   if (req.method === 'POST') {
     const { force = false, entities = [] } = req.body || {}
-    
+
     try {
       const client = new ConnectWiseClient({
         clientId: process.env.CW_CLIENT_ID || process.env.VITE_CW_CLIENT_ID || '',
@@ -92,23 +92,23 @@ export default async function handler(
 
       const results: SyncStatus[] = []
       const now = new Date()
-      
+
       // Determine which entities to sync
-      const entitiesToSync = entities.length > 0 
-        ? entities 
+      const entitiesToSync = entities.length > 0
+        ? entities
         : ['members', 'boards', 'tickets', 'timeEntries', 'projects', 'projectTickets']
 
       // Check staleness for each entity
       const syncLogs = await prisma.syncLog.findMany()
-      
+
       // First, sync members to get the allowed member IDs
       let allowedMemberIds: number[] = []
-      
+
       for (const entityType of entitiesToSync) {
         const log = syncLogs.find(l => l.entityType === entityType)
         const lastSyncAt = log?.lastSyncAt || null
         const isStale = !lastSyncAt || (now.getTime() - lastSyncAt.getTime() > SYNC_STALE_THRESHOLD_MS)
-        
+
         if (!isStale && !force) {
           results.push({
             entity: entityType,
@@ -123,7 +123,7 @@ export default async function handler(
         // Full sync: first time (no lastSyncAt), force=true, or for members/boards (small datasets)
         const isIncrementalSync = Boolean(lastSyncAt && !force && !['members', 'boards'].includes(entityType))
         const syncMode = isIncrementalSync ? 'incremental' : 'full'
-        
+
         console.log(`[Sync] Starting ${syncMode} sync for ${entityType}...`)
         if (isIncrementalSync && lastSyncAt) {
           console.log(`[Sync] Fetching records modified since ${lastSyncAt.toISOString()}`)
@@ -204,7 +204,7 @@ export default async function handler(
             if (isIncrementalSync && SYNC_INCREMENTAL_FALLBACK) {
               console.warn(`[Sync] Incremental sync failed for ${entityType}, falling back to full sync...`)
               console.warn(`[Sync] Error was: ${syncError.message}`)
-              
+
               usedIncremental = false
               const result = await performEntitySync(false) // Full sync
               count = result.count
@@ -265,16 +265,16 @@ export default async function handler(
 async function syncMembers(client: any): Promise<{ count: number; memberIds: number[] }> {
   console.log('[Sync] Fetching members from ConnectWise...')
   const allMembers = await client.getMembers()
-  
+
   // Filter to only the 7 allowed engineers
-  const allowedMembers = allMembers.filter((m: any) => 
+  const allowedMembers = allMembers.filter((m: any) =>
     ALLOWED_ENGINEER_IDENTIFIERS.includes(m.identifier?.toLowerCase())
   )
-  
+
   console.log(`[Sync] Found ${allMembers.length} total members, filtering to ${allowedMembers.length} allowed engineers`)
-  
+
   const memberIds: number[] = []
-  
+
   for (const member of allowedMembers) {
     memberIds.push(member.id)
     await prisma.member.upsert({
@@ -296,17 +296,17 @@ async function syncMembers(client: any): Promise<{ count: number; memberIds: num
       }
     })
   }
-  
-  console.log(`[Sync] ✅ Synced ${allowedMembers.length} allowed engineers:`, 
+
+  console.log(`[Sync] ✅ Synced ${allowedMembers.length} allowed engineers:`,
     allowedMembers.map((m: any) => m.identifier).join(', '))
-  
+
   return { count: allowedMembers.length, memberIds }
 }
 
 async function syncBoards(client: any): Promise<number> {
   console.log('[Sync] Fetching boards from ConnectWise...')
   const boards = await client.getBoards()
-  
+
   console.log(`[Sync] Upserting ${boards.length} boards to database...`)
   for (const board of boards) {
     const type = board.name?.includes('MS') ? 'MS' : 'PS'
@@ -324,7 +324,7 @@ async function syncBoards(client: any): Promise<number> {
     })
 
     // Track service boards
-    if (SERVICE_BOARD_NAMES.some(name => 
+    if (SERVICE_BOARD_NAMES.some(name =>
       board.name?.toLowerCase().includes(name.toLowerCase().replace('(ms)', '').replace('(ts)', '').trim()) ||
       name.toLowerCase().includes(board.name?.toLowerCase())
     )) {
@@ -341,23 +341,23 @@ async function syncBoards(client: any): Promise<number> {
       })
     }
   }
-  
+
   return boards.length
 }
 
 async function syncTickets(client: any, allowedMemberIds: number[], modifiedSince?: Date): Promise<number> {
   console.log('[Sync] Fetching boards to get service board IDs...')
   const boards = await client.getBoards()
-  
+
   // Get allowed member identifiers for filtering
   const allowedMembers = await prisma.member.findMany({
     where: { id: { in: allowedMemberIds } }
   })
   const allowedIdentifiers = allowedMembers.map(m => m.identifier.toLowerCase())
-  
+
   // Find service board IDs
   const serviceBoardIds = boards
-    .filter((b: any) => SERVICE_BOARD_NAMES.some(name => 
+    .filter((b: any) => SERVICE_BOARD_NAMES.some(name =>
       b.name?.toLowerCase().includes(name.toLowerCase().replace('(ms)', '').replace('(ts)', '').trim()) ||
       name.toLowerCase().includes(b.name?.toLowerCase())
     ))
@@ -365,22 +365,22 @@ async function syncTickets(client: any, allowedMemberIds: number[], modifiedSinc
 
   const syncMode = modifiedSince ? 'incremental' : 'full'
   console.log(`[Sync] Found ${serviceBoardIds.length} service boards, fetching tickets (${syncMode})...`)
-  
+
   // Fetch tickets from service boards - pass modifiedSince for incremental sync
   const allTickets = await client.getTickets(serviceBoardIds, undefined, undefined, {}, modifiedSince)
-  
+
   // Filter tickets to only those owned by or assigned to allowed engineers
   const relevantTickets = allTickets.filter((t: any) => {
     const owner = t.owner?.identifier?.toLowerCase() || t.owner?.toLowerCase() || ''
     const resources = t.teamMember?.toLowerCase() || t.resources?.toLowerCase() || ''
-    
+
     // Include ticket if owner or any resource is an allowed engineer
     return allowedIdentifiers.includes(owner) ||
-           allowedIdentifiers.some(id => resources.includes(id))
+      allowedIdentifiers.some(id => resources.includes(id))
   })
-  
+
   console.log(`[Sync] ${syncMode === 'incremental' ? 'Incremental: ' : ''}Filtered ${allTickets.length} tickets to ${relevantTickets.length} relevant to allowed engineers`)
-  
+
   for (const ticket of relevantTickets) {
     const boardId = ticket.board?.id || ticket.boardId
     if (!boardId) continue
@@ -434,24 +434,24 @@ async function syncTickets(client: any, allowedMemberIds: number[], modifiedSinc
       }
     })
   }
-  
+
   return relevantTickets.length
 }
 
 async function syncTimeEntries(client: any, allowedMemberIds: number[], modifiedSince?: Date): Promise<number> {
   const syncMode = modifiedSince ? 'incremental' : 'full'
   console.log(`[Sync] Fetching time entries for allowed engineers from ConnectWise (${syncMode})...`)
-  
+
   // Fetch time entries only for allowed member IDs - pass modifiedSince for incremental sync
   const entries = await client.getTimeEntries(undefined, undefined, allowedMemberIds, {}, modifiedSince)
-  
+
   console.log(`[Sync] ${syncMode === 'incremental' ? 'Incremental: ' : ''}Fetched ${entries.length} time entries for ${allowedMemberIds.length} allowed engineers`)
-  
+
   let syncedCount = 0
   for (const entry of entries) {
     const memberId = entry.member?.id || entry.memberId
     if (!memberId) continue
-    
+
     // Only sync if member is in allowed list
     if (!allowedMemberIds.includes(memberId)) continue
 
@@ -478,7 +478,7 @@ async function syncTimeEntries(client: any, allowedMemberIds: number[], modified
             boardId: 1,
             summary: 'Placeholder - synced via time entry',
           }
-        }).catch(() => {}) // Ignore if already exists
+        }).catch(() => { }) // Ignore if already exists
       }
     }
 
@@ -508,20 +508,30 @@ async function syncTimeEntries(client: any, allowedMemberIds: number[], modified
     })
     syncedCount++
   }
-  
+
   return syncedCount
 }
 
 async function syncProjects(client: any, modifiedSince?: Date): Promise<number> {
   const syncMode = modifiedSince ? 'incremental' : 'full'
   console.log(`[Sync] Fetching projects from ConnectWise (${syncMode})...`)
-  
+
   // Fetch projects managed by allowed engineers - pass modifiedSince for incremental sync
   const allProjects = await client.getProjects(ALLOWED_ENGINEER_IDENTIFIERS, {}, modifiedSince)
-  
+
   console.log(`[Sync] ${syncMode === 'incremental' ? 'Incremental: ' : ''}Fetched ${allProjects.length} projects managed by allowed engineers`)
-  
+
+  // Track which projects need audit trail sync (Closed/Ready to Close)
+  const auditProjectIds: number[] = []
+
   for (const project of allProjects) {
+    // Check if status is "Ready to Close" or "Closed" to trigger audit sync
+    // We want to capture the history of when it entered this state
+    const statusName = project.status?.name || project.status
+    if (statusName === 'Ready to Close' || statusName === 'Closed') {
+      auditProjectIds.push(project.id)
+    }
+
     await prisma.project.upsert({
       where: { id: project.id },
       create: {
@@ -563,33 +573,75 @@ async function syncProjects(client: any, modifiedSince?: Date): Promise<number> 
       }
     })
   }
-  
+
+  // Sync audit trails for relevant projects
+  if (auditProjectIds.length > 0) {
+    console.log(`[Sync] Syncing audit trails for ${auditProjectIds.length} closed/ready-to-close projects...`)
+    await syncProjectAudits(client, auditProjectIds)
+  }
+
   return allProjects.length
+}
+
+async function syncProjectAudits(client: any, projectIds: number[]): Promise<void> {
+  for (const projectId of projectIds) {
+    try {
+      // Fetch audit trail for this project
+      const audits = await client.getAuditTrail('Project', projectId)
+
+      // Filter for status changes to "Ready to Close" or "Closed"
+      const statusAudits = audits.filter((a: any) =>
+        a.auditType === 'Status' || // CW implementation detail: check actual field name
+        a.message?.includes('status changed') ||
+        (a.newValue && (a.newValue.includes('Ready to Close') || a.newValue.includes('Closed')))
+      )
+
+      for (const audit of statusAudits) {
+        // Only interested if it moved TO Ready to Close or Closed using the message or new value
+        // The audit object structure varies, assuming standard fields:
+        // enteredBy, dateEntered, message, oldValue, newValue
+
+        await prisma.projectAudit.create({
+          data: {
+            projectId,
+            status: audit.newValue,
+            previousStatus: audit.oldValue,
+            changedBy: audit.enteredBy,
+            dateEntered: new Date(audit.dateEntered),
+            message: audit.message
+          }
+        }).catch(() => { }) // Ignore duplicates if needed, or better: use upsert if we have a stable ID
+      }
+    } catch (error) {
+      console.error(`[Sync] Error syncing audit for project ${projectId}:`, error)
+      // Continue to next project
+    }
+  }
 }
 
 async function syncProjectTickets(client: any, modifiedSince?: Date): Promise<number> {
   const syncMode = modifiedSince ? 'incremental' : 'full'
   console.log(`[Sync] Fetching project tickets from ConnectWise (${syncMode})...`)
-  
+
   // Get all projects in our database (already filtered to allowed managers)
   const projects = await prisma.project.findMany()
   const projectIds = projects.map(p => p.id)
-  
+
   if (projectIds.length === 0) {
     console.log('[Sync] No projects to sync tickets for')
     return 0
   }
-  
+
   // Fetch project tickets - pass modifiedSince for incremental sync
   const allTickets = await client.getProjectTickets(undefined, {}, modifiedSince)
-  
+
   // Filter to only tickets for our projects
-  const relevantTickets = allTickets.filter((t: any) => 
+  const relevantTickets = allTickets.filter((t: any) =>
     projectIds.includes(t.project?.id)
   )
-  
+
   console.log(`[Sync] ${syncMode === 'incremental' ? 'Incremental: ' : ''}Filtered ${allTickets.length} project tickets to ${relevantTickets.length} for allowed engineers' projects`)
-  
+
   for (const ticket of relevantTickets) {
     const projectId = ticket.project?.id
     if (!projectId) continue
@@ -639,6 +691,6 @@ async function syncProjectTickets(client: any, modifiedSince?: Date): Promise<nu
       }
     })
   }
-  
+
   return relevantTickets.length
 }

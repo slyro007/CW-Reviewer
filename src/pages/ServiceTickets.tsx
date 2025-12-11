@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
+import { useSelectedEngineerStore, TEAM_DEFINITIONS } from '@/stores/selectedEngineerStore'
 import { useMembersStore } from '@/stores/membersStore'
 import { useTicketsStore, SERVICE_BOARD_NAMES } from '@/stores/ticketsStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
@@ -45,17 +45,17 @@ const BOARD_COLORS: Record<string, string> = {
 }
 
 export default function ServiceTickets() {
-  const { selectedEngineerId } = useSelectedEngineerStore()
+  const { selectedEngineerId, selectedTeam } = useSelectedEngineerStore()
   const { members } = useMembersStore()
-  const { 
+  const {
     serviceTickets, boards, serviceBoardIds,
-    isLoadingService, error, 
+    isLoadingService, error,
     fetchServiceBoardTickets, fetchBoards,
     getTicketStats, getServiceBoardName
   } = useTicketsStore()
   const { entries } = useTimeEntriesStore()
   const { getPeriodLabel, getDateRange } = useTimePeriodStore()
-  
+
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [boardFilter, setBoardFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
@@ -66,7 +66,7 @@ export default function ServiceTickets() {
   const periodLabel = getPeriodLabel()
   const dateRange = getDateRange()
 
-  const selectedEngineer = selectedEngineerId 
+  const selectedEngineer = selectedEngineerId
     ? members.find(m => m.id === selectedEngineerId)
     : null
 
@@ -85,19 +85,19 @@ export default function ServiceTickets() {
   const engineerTicketIds = useMemo(() => {
     if (!selectedEngineerId || !selectedEngineer) return null
     const ticketIds = new Set<number>()
-    
+
     // Add tickets with time entries
     entries
       .filter(e => e.memberId === selectedEngineerId && e.ticketId)
       .forEach(e => {
         if (e.ticketId) ticketIds.add(e.ticketId)
       })
-    
+
     // Add tickets where engineer is owner
     serviceTickets
       .filter(t => t.owner && t.owner.toLowerCase() === selectedEngineer.identifier.toLowerCase())
       .forEach(t => ticketIds.add(t.id))
-    
+
     // Add tickets where engineer is a resource/team member
     serviceTickets
       .filter(t => {
@@ -106,7 +106,7 @@ export default function ServiceTickets() {
         return resourceIds.includes(selectedEngineer.identifier.toLowerCase())
       })
       .forEach(t => ticketIds.add(t.id))
-    
+
     return ticketIds
   }, [entries, selectedEngineerId, selectedEngineer, serviceTickets])
 
@@ -117,6 +117,13 @@ export default function ServiceTickets() {
     // Filter by selected engineer's tickets (owner, resources, OR time entries)
     if (selectedEngineer && engineerTicketIds) {
       result = result.filter(t => engineerTicketIds.has(t.id))
+    } else if (selectedTeam !== 'All Company') {
+      const teamIdentifiers = TEAM_DEFINITIONS[selectedTeam] || []
+      result = result.filter(t => {
+        const isOwnerInTeam = teamIdentifiers.some((id: string) => id.toLowerCase() === t.owner?.toLowerCase())
+        const isResourceInTeam = t.resources && teamIdentifiers.some((id: string) => t.resources?.toLowerCase().includes(id.toLowerCase()))
+        return isOwnerInTeam || isResourceInTeam
+      })
     }
 
     // Filter by date range (dateEntered) - include full end day
@@ -139,7 +146,7 @@ export default function ServiceTickets() {
 
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
-      result = result.filter(t => 
+      result = result.filter(t =>
         t.summary?.toLowerCase().includes(query) ||
         t.id.toString().includes(query) ||
         t.company?.toLowerCase().includes(query)
@@ -174,8 +181,8 @@ export default function ServiceTickets() {
       byBoard[boardName] = (byBoard[boardName] || 0) + 1
     })
     return Object.entries(byBoard)
-      .map(([name, value]) => ({ 
-        name: name.replace('(MS)', '').replace('(TS)', '').trim(), 
+      .map(([name, value]) => ({
+        name: name.replace('(MS)', '').replace('(TS)', '').trim(),
         fullName: name,
         value,
         color: BOARD_COLORS[name] || '#6b7280',
@@ -206,7 +213,7 @@ export default function ServiceTickets() {
   const generateAIAnalysis = async () => {
     setIsGeneratingAnalysis(true)
     setAnalysisError(null)
-    
+
     try {
       const ticketData = {
         period: periodLabel,
@@ -243,7 +250,7 @@ Keep the tone professional and actionable.`
         prompt,
         data: ticketData,
       })
-      
+
       setAiAnalysis(response.analysis)
     } catch (error: any) {
       console.error('Error generating analysis:', error)
@@ -264,7 +271,7 @@ Keep the tone professional and actionable.`
         <div>
           <h2 className="text-3xl font-bold text-white mb-2">Service Tickets</h2>
           <p className="text-gray-400">
-            {selectedEngineer 
+            {selectedEngineer
               ? `Tickets worked by ${selectedEngineer.firstName} ${selectedEngineer.lastName}`
               : 'All service desk tickets'}
             {' • '}<span className="text-blue-400">{periodLabel}</span>
@@ -333,12 +340,12 @@ Keep the tone professional and actionable.`
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1f2937', 
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1f2937',
                       border: '1px solid #374151',
                       borderRadius: '8px',
-                      color: '#fff' 
+                      color: '#fff'
                     }}
                   />
                 </PieChart>
@@ -359,19 +366,19 @@ Keep the tone professional and actionable.`
               <BarChart data={boardDistribution} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                 <XAxis type="number" stroke="#9ca3af" />
-                <YAxis 
-                  type="category" 
-                  dataKey="name" 
-                  stroke="#9ca3af" 
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  stroke="#9ca3af"
                   width={100}
                   tick={{ fontSize: 11 }}
                 />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#1f2937', 
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#1f2937',
                     border: '1px solid #374151',
                     borderRadius: '8px',
-                    color: '#fff' 
+                    color: '#fff'
                   }}
                   formatter={(value: number, _name: string, props: any) => [value, props.payload.fullName]}
                 />
@@ -458,7 +465,7 @@ Keep the tone professional and actionable.`
         <h3 className="text-lg font-semibold text-white mb-4">
           Tickets ({filteredTickets.length})
         </h3>
-        
+
         {isLoadingService ? (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
@@ -485,19 +492,19 @@ Keep the tone professional and actionable.`
               </thead>
               <tbody>
                 {filteredTickets.slice(0, 50).map((ticket) => {
-                  const age = ticket.dateEntered 
+                  const age = ticket.dateEntered
                     ? differenceInHours(new Date(), new Date(ticket.dateEntered))
                     : null
-                  const ageText = age !== null 
-                    ? age < 24 ? `${age}h` 
-                    : age < 168 ? `${Math.floor(age / 24)}d`
-                    : `${Math.floor(age / 168)}w`
+                  const ageText = age !== null
+                    ? age < 24 ? `${age}h`
+                      : age < 168 ? `${Math.floor(age / 24)}d`
+                        : `${Math.floor(age / 168)}w`
                     : 'N/A'
                   const ageColor = age !== null
                     ? age < 24 ? 'text-green-400'
-                    : age < 48 ? 'text-yellow-400'
-                    : age < 168 ? 'text-orange-400'
-                    : 'text-red-400'
+                      : age < 48 ? 'text-yellow-400'
+                        : age < 168 ? 'text-orange-400'
+                          : 'text-red-400'
                     : 'text-gray-400'
 
                   return (
@@ -511,9 +518,9 @@ Keep the tone professional and actionable.`
                         </p>
                       </td>
                       <td className="py-3 px-4">
-                        <span 
+                        <span
                           className="px-2 py-1 rounded text-xs font-medium"
-                          style={{ 
+                          style={{
                             backgroundColor: `${BOARD_COLORS[getServiceBoardName(ticket.boardId)] || '#6b7280'}20`,
                             color: BOARD_COLORS[getServiceBoardName(ticket.boardId)] || '#9ca3af'
                           }}
@@ -522,9 +529,9 @@ Keep the tone professional and actionable.`
                         </span>
                       </td>
                       <td className="py-3 px-4">
-                        <span 
+                        <span
                           className="px-2 py-1 rounded text-xs font-medium"
-                          style={{ 
+                          style={{
                             backgroundColor: `${STATUS_COLORS[ticket.status || ''] || '#6b7280'}20`,
                             color: STATUS_COLORS[ticket.status || ''] || '#9ca3af'
                           }}
@@ -563,11 +570,10 @@ Keep the tone professional and actionable.`
           <button
             onClick={generateAIAnalysis}
             disabled={isGeneratingAnalysis || filteredTickets.length === 0}
-            className={`px-5 py-2.5 rounded-lg font-medium transition-all ${
-              isGeneratingAnalysis || filteredTickets.length === 0
-                ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
-            }`}
+            className={`px-5 py-2.5 rounded-lg font-medium transition-all ${isGeneratingAnalysis || filteredTickets.length === 0
+              ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+              : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
+              }`}
           >
             {isGeneratingAnalysis ? (
               <span className="flex items-center gap-2">
@@ -579,13 +585,13 @@ Keep the tone professional and actionable.`
             )}
           </button>
         </div>
-        
+
         {analysisError && (
           <div className="bg-red-600/20 border border-red-500 rounded-lg p-4 mb-4">
             <p className="text-red-400">{analysisError}</p>
           </div>
         )}
-        
+
         {aiAnalysis ? (
           <div className="bg-gradient-to-br from-gray-700 to-gray-750 rounded-lg p-6 border border-gray-600">
             <div className="whitespace-pre-wrap text-gray-200 leading-relaxed">

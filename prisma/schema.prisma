@@ -141,10 +141,30 @@ model Project {
   timeEntries         TimeEntry[]
   projectTickets      ProjectTicket[]
 
+  audits              ProjectAudit[]
+
   @@index([status])
   @@index([managerIdentifier])
   @@index([closedFlag])
   @@index([company])
+}
+
+model ProjectAudit {
+  id              String    @id @default(cuid())
+  projectId       Int
+  status          String?   // The status changed TO
+  previousStatus  String?   // The status changed FROM
+  changedBy       String?   // User identifier who made the change
+  dateEntered     DateTime
+  message         String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  project         Project   @relation(fields: [projectId], references: [id])
+
+  @@index([projectId])
+  @@index([status])
+  @@index([dateEntered])
 }
 
 model ProjectTicket {

@@ -1,5 +1,5 @@
 import { useMemo, useEffect, useState } from 'react'
-import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
+import { useSelectedEngineerStore, TEAM_DEFINITIONS } from '@/stores/selectedEngineerStore'
 import { useMembersStore } from '@/stores/membersStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
 import { useTicketsStore } from '@/stores/ticketsStore'
@@ -22,13 +22,13 @@ interface NoteEntry {
 }
 
 export default function Notes() {
-  const { selectedEngineerId } = useSelectedEngineerStore()
+  const { selectedEngineerId, selectedTeam } = useSelectedEngineerStore()
   const { members } = useMembersStore()
   const { entries, fetchTimeEntries } = useTimeEntriesStore()
   const { serviceTickets, fetchServiceBoardTickets } = useTicketsStore()
   const { projectTickets, fetchProjects, fetchProjectTickets } = useProjectsStore()
   const { getDateRange, getPeriodLabel } = useTimePeriodStore()
-  
+
   const { dataSources, setDataSources, includesServiceDesk, includesProjects } = useDataSources()
   const [sortBy, setSortBy] = useState<'date' | 'quality' | 'hours'>('date')
   const [filterQuality, setFilterQuality] = useState<'all' | 'good' | 'poor'>('all')
@@ -58,14 +58,20 @@ export default function Notes() {
       const entryDate = new Date(e.dateStart)
       return entryDate >= dateRange.start && entryDate <= dateRange.end
     })
-    
+
     if (selectedEngineerId !== null) {
       result = result.filter(e => e.memberId === selectedEngineerId)
+    } else if (selectedTeam !== 'All Company') {
+      const teamIdentifiers = TEAM_DEFINITIONS[selectedTeam] || []
+      result = result.filter(e => {
+        const member = members.find(m => m.id === e.memberId)
+        return member && teamIdentifiers.includes(member.identifier.toLowerCase())
+      })
     }
 
     // Filter by data source
     if (!includesServiceDesk && !includesProjects) return []
-    
+
     const mapped: NoteEntry[] = []
 
     for (const entry of result) {
@@ -109,7 +115,7 @@ export default function Notes() {
   // Apply filters and sorting
   const displayEntries = useMemo(() => {
     let result = [...enrichedEntries]
-    
+
     // Quality filter
     if (filterQuality === 'good') {
       result = result.filter(e => e.qualityScore >= 60)
@@ -136,8 +142,8 @@ export default function Notes() {
   // Stats
   const stats = useMemo(() => {
     const withNotes = enrichedEntries.filter(e => e.notes && e.notes.trim().length > 0)
-    const avgQuality = withNotes.length > 0 
-      ? withNotes.reduce((sum, e) => sum + e.qualityScore, 0) / withNotes.length 
+    const avgQuality = withNotes.length > 0
+      ? withNotes.reduce((sum, e) => sum + e.qualityScore, 0) / withNotes.length
       : 0
     const serviceDeskCount = enrichedEntries.filter(e => e.source === 'serviceDesk').length
     const projectsCount = enrichedEntries.filter(e => e.source === 'projects').length

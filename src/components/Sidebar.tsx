@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import EngineerSelector from './EngineerSelector'
+import TeamFilter from './TeamFilter'
 import TimePeriodSelector from './TimePeriodSelector'
 
 export default function Sidebar() {
@@ -104,9 +104,9 @@ export default function Sidebar() {
             </button>
           </div>
 
-          {/* Engineer Selector */}
+          {/* Team & Engineer Selector */}
           <div className="p-4 border-b border-gray-700">
-            <EngineerSelector />
+            <TeamFilter />
           </div>
 
           {/* Time Period Selector */}
@@ -131,10 +131,9 @@ export default function Sidebar() {
                       }}
                       className={`
                         flex items-center px-4 py-3 rounded-lg transition-colors
-                        ${
-                          isActive
-                            ? 'bg-blue-600 text-white'
-                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                        ${isActive
+                          ? 'bg-blue-600 text-white'
+                          : 'text-gray-300 hover:bg-gray-800 hover:text-white'
                         }
                       `}
                     >

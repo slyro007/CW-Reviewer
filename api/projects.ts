@@ -76,7 +76,13 @@ export default async function handler(
         type: true,
         closedFlag: true,
         description: true,
-        updatedAt: true // For incremental sync
+        updatedAt: true, // For incremental sync
+        audits: {
+          orderBy: {
+            dateEntered: 'desc'
+          },
+          take: 5 // Only need the most recent status changes
+        }
       },
       orderBy: {
         name: 'asc',
@@ -86,27 +92,37 @@ export default async function handler(
     console.log(`[API /projects] Returning ${projects.length} projects from database`)
 
     // Transform to match expected format (matching CW API structure)
-    const transformed = projects.map(p => ({
-      id: p.id,
-      name: p.name,
-      status: { name: p.status },
-      company: { name: p.company },
-      manager: {
-        identifier: p.managerIdentifier,
-        name: p.managerName,
-      },
-      board: { name: p.boardName },
-      estimatedStart: p.estimatedStart?.toISOString(),
-      estimatedEnd: p.estimatedEnd?.toISOString(),
-      actualStart: p.actualStart?.toISOString(),
-      actualEnd: p.actualEnd?.toISOString(),
-      estimatedHours: p.estimatedHours,
-      actualHours: p.actualHours,
-      percentComplete: p.percentComplete,
-      type: { name: p.type },
-      closedFlag: p.closedFlag,
-      description: p.description,
-    }))
+    const transformed = projects.map(p => {
+      // Find the audit that set it to Closed/Ready to Close
+      const closingAudit = p.audits?.find(a =>
+        (a.status?.includes('Closed') || a.status?.includes('Ready to Close'))
+      )
+
+      return {
+        id: p.id,
+        name: p.name,
+        status: { name: p.status },
+        company: { name: p.company },
+        manager: {
+          identifier: p.managerIdentifier,
+          name: p.managerName,
+        },
+        board: { name: p.boardName },
+        estimatedStart: p.estimatedStart?.toISOString(),
+        estimatedEnd: p.estimatedEnd?.toISOString(),
+        actualStart: p.actualStart?.toISOString(),
+        actualEnd: p.actualEnd?.toISOString(),
+        estimatedHours: p.estimatedHours,
+        actualHours: p.actualHours,
+        percentComplete: p.percentComplete,
+        type: { name: p.type },
+        closedFlag: p.closedFlag,
+        description: p.description || undefined,
+        // Enhanced audit info
+        auditClosedBy: closingAudit?.changedBy || undefined,
+        auditClosedDate: closingAudit?.dateEntered ? closingAudit.dateEntered.toISOString() : undefined,
+      }
+    })
 
     return res.status(200).json(transformed)
   } catch (error: any) {

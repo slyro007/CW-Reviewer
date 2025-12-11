@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react'
-import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
+import { useSelectedEngineerStore, TEAM_DEFINITIONS } from '@/stores/selectedEngineerStore'
 import { useMembersStore } from '@/stores/membersStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
 import { useTicketsStore } from '@/stores/ticketsStore'
@@ -26,7 +26,7 @@ interface AIWrappedResult {
 }
 
 export default function Highlights() {
-  const { selectedEngineerId } = useSelectedEngineerStore()
+  const { selectedEngineerId, selectedTeam } = useSelectedEngineerStore()
   const { members } = useMembersStore()
   const { entries, fetchTimeEntries } = useTimeEntriesStore()
   const { serviceTickets, fetchServiceBoardTickets } = useTicketsStore()
@@ -61,9 +61,17 @@ export default function Highlights() {
       const entryDate = new Date(e.dateStart)
       return entryDate >= dateRange.start && entryDate <= dateRange.end
     })
-    if (selectedEngineerId !== null) result = result.filter(e => e.memberId === selectedEngineerId)
+    if (selectedEngineerId !== null) {
+      result = result.filter(e => e.memberId === selectedEngineerId)
+    } else if (selectedTeam !== 'All Company') {
+      const teamIdentifiers = TEAM_DEFINITIONS[selectedTeam] || []
+      result = result.filter(e => {
+        const member = members.find(m => m.id === e.memberId)
+        return member && teamIdentifiers.includes(member.identifier.toLowerCase())
+      })
+    }
     return result
-  }, [entries, selectedEngineerId, dateRange])
+  }, [entries, selectedEngineerId, selectedTeam, dateRange, members])
 
   // Filter service tickets
   const filteredServiceTickets = useMemo(() => {
@@ -80,9 +88,18 @@ export default function Highlights() {
         t.resources?.toLowerCase().includes(selectedEngineer.identifier.toLowerCase())
       ).forEach(t => ticketIds.add(t.id))
       result = result.filter(t => ticketIds.has(t.id))
+    } else if (selectedTeam !== 'All Company') {
+      const teamIdentifiers = TEAM_DEFINITIONS[selectedTeam] || []
+      result = result.filter(t => {
+        const isOwnerInTeam = teamIdentifiers.some((id: string) => id.toLowerCase() === t.owner?.toLowerCase())
+        const isResourceInTeam = t.resources && teamIdentifiers.some((id: string) => t.resources?.toLowerCase().includes(id.toLowerCase()))
+        // Also include if in filteredEntries (which are team filtered)
+        const hasEntry = filteredEntries.some(e => e.ticketId === t.id)
+        return isOwnerInTeam || isResourceInTeam || hasEntry
+      })
     }
     return result
-  }, [serviceTickets, selectedEngineer, filteredEntries, dateRange, includesServiceDesk])
+  }, [serviceTickets, selectedEngineer, selectedTeam, filteredEntries, dateRange, includesServiceDesk])
 
   // Filter projects - include projects where engineer is manager OR has time entries
   const filteredProjects = useMemo(() => {
@@ -99,9 +116,21 @@ export default function Highlights() {
         p.managerIdentifier?.toLowerCase() === identifier ||
         timeEntryProjectIds.has(p.id)
       )
+    } else if (selectedTeam !== 'All Company') {
+      const teamIdentifiers = TEAM_DEFINITIONS[selectedTeam] || []
+      // Get project IDs from time entries (team filtered)
+      const timeEntryProjectIds = new Set(
+        filteredEntries
+          .filter(e => e.projectId !== null && e.projectId !== undefined)
+          .map(e => e.projectId!)
+      )
+      return projects.filter(p =>
+        (p.managerIdentifier && teamIdentifiers.includes(p.managerIdentifier.toLowerCase())) ||
+        timeEntryProjectIds.has(p.id)
+      )
     }
     return projects
-  }, [projects, selectedEngineer, includesProjects, filteredEntries])
+  }, [projects, selectedEngineer, selectedTeam, includesProjects, filteredEntries])
 
   const filteredProjectTickets = useMemo(() => {
     if (!includesProjects) return []

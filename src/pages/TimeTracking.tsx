@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
-import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
+import { useSelectedEngineerStore, TEAM_DEFINITIONS } from '@/stores/selectedEngineerStore'
 import { useMembersStore } from '@/stores/membersStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
 import { useTicketsStore } from '@/stores/ticketsStore'
@@ -27,13 +27,13 @@ interface EngineerAnalytics {
 }
 
 export default function TimeTracking() {
-  const { selectedEngineerId } = useSelectedEngineerStore()
+  const { selectedEngineerId, selectedTeam } = useSelectedEngineerStore()
   const { members } = useMembersStore()
   const { entries, isLoading, fetchTimeEntries } = useTimeEntriesStore()
   const { serviceTickets, fetchServiceBoardTickets } = useTicketsStore()
   const { projects, projectTickets, fetchProjects, fetchProjectTickets } = useProjectsStore()
   const { getDateRange, getPeriodLabel } = useTimePeriodStore()
-  
+
   const { dataSources, setDataSources, includesServiceDesk, includesProjects } = useDataSources()
   const [isGeneratingAnalysis, setIsGeneratingAnalysis] = useState(false)
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null)
@@ -61,13 +61,29 @@ export default function TimeTracking() {
       const entryDate = new Date(e.dateStart)
       return entryDate >= dateRange.start && entryDate <= dateRange.end
     })
-    if (selectedEngineerId !== null) result = result.filter(e => e.memberId === selectedEngineerId)
+
+    if (selectedEngineerId !== null) {
+      result = result.filter(e => e.memberId === selectedEngineerId)
+    } else if (selectedTeam !== 'All Company') {
+      const teamIdentifiers = TEAM_DEFINITIONS[selectedTeam]
+      result = result.filter(e => {
+        const member = members.find(m => m.id === e.memberId)
+        return member && teamIdentifiers?.includes(member.identifier.toLowerCase())
+      })
+    }
     return result
-  }, [entries, selectedEngineerId, dateRange])
+  }, [entries, selectedEngineerId, selectedTeam, dateRange, members])
 
   // Calculate analytics for each engineer
   const engineerAnalytics = useMemo((): EngineerAnalytics[] => {
-    const targetMembers = selectedEngineerId ? members.filter(m => m.id === selectedEngineerId) : members
+    let targetMembers = members
+
+    if (selectedEngineerId) {
+      targetMembers = members.filter(m => m.id === selectedEngineerId)
+    } else if (selectedTeam !== 'All Company') {
+      const teamIdentifiers = TEAM_DEFINITIONS[selectedTeam]
+      targetMembers = members.filter(m => teamIdentifiers?.includes(m.identifier.toLowerCase()))
+    }
 
     return targetMembers.map(member => {
       const memberEntries = filteredEntries.filter(e => e.memberId === member.id)
@@ -87,7 +103,7 @@ export default function TimeTracking() {
         // Filter by engineer
         return t.owner?.toLowerCase() === identifier || t.resources?.toLowerCase().includes(identifier)
       }) : []
-      
+
       // Project stats - filter by date range and engineer
       // Include projects where engineer is manager OR has time entries
       const memberTimeEntryProjectIds = new Set(
@@ -95,7 +111,7 @@ export default function TimeTracking() {
           .filter(e => e.projectId !== null && e.projectId !== undefined)
           .map(e => e.projectId!)
       )
-      const memberProjects = includesProjects ? projects.filter(p => 
+      const memberProjects = includesProjects ? projects.filter(p =>
         p.managerIdentifier?.toLowerCase() === identifier ||
         memberTimeEntryProjectIds.has(p.id)
       ) : []
@@ -232,7 +248,7 @@ export default function TimeTracking() {
                         <h4 className="text-lg font-semibold text-white">{engineer.name}</h4>
                         <span className={`px-2 py-1 rounded text-xs font-medium ${rating.color}`}>{rating.label}</span>
                       </div>
-                      
+
                       <div className="space-y-3">
                         <div>
                           <div className="flex justify-between text-sm mb-1">
@@ -243,7 +259,7 @@ export default function TimeTracking() {
                             <div className="h-full bg-blue-500 rounded-full" style={{ width: `${engineerAnalytics.length > 0 ? Math.min((engineer.totalHours / Math.max(...engineerAnalytics.map(e => e.totalHours), 1)) * 100, 100) : 0}%` }} />
                           </div>
                         </div>
-                        
+
                         <div>
                           <div className="flex justify-between text-sm mb-1">
                             <span className="text-gray-400">Billable %</span>
@@ -260,7 +276,7 @@ export default function TimeTracking() {
                             <span className="text-white">{engineer.serviceTicketsWorked} ({engineer.serviceTicketsClosed} closed)</span>
                           </div>
                         )}
-                        
+
                         {includesProjects && (
                           <div className="flex justify-between text-sm">
                             <span className="text-purple-400">Project Tickets</span>

@@ -95,6 +95,8 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
         closedFlag: p.closedFlag || false,
         description: p.description || undefined,
         updatedAt: p.updatedAt ? new Date(p.updatedAt) : undefined,
+        auditClosedBy: p.auditClosedBy || undefined,
+        auditClosedDate: p.auditClosedDate ? new Date(p.auditClosedDate) : undefined,
       }))
 
       set({ projects, isLoading: false, lastProjectSync: new Date() })
@@ -146,6 +148,8 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
         closedFlag: p.closedFlag || false,
         description: p.description || undefined,
         updatedAt: p.updatedAt ? new Date(p.updatedAt) : undefined,
+        auditClosedBy: p.auditClosedBy || undefined,
+        auditClosedDate: p.auditClosedDate ? new Date(p.auditClosedDate) : undefined,
       }))
 
       let updatedProjects = [...projects]

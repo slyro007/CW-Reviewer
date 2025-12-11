@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
-import TeamFilter from '@/components/TeamFilter'
 import DataSourceFilter, { type DataSource } from '@/components/DataSourceFilter'
 import { useMembersStore } from '@/stores/membersStore'
 import { useTicketsStore } from '@/stores/ticketsStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
 import { useProjectsStore } from '@/stores/projectsStore'
 import { useTimePeriodStore } from '@/stores/timePeriodStore'
-import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
+import { useSelectedEngineerStore, TEAM_DEFINITIONS } from '@/stores/selectedEngineerStore'
 
 export default function Dashboard() {
   const { members, isLoading: membersLoading, fetchMembers } = useMembersStore()
+  const { selectedEngineerId, selectedTeam } = useSelectedEngineerStore()
 
   const {
     entries,
@@ -38,7 +38,7 @@ export default function Dashboard() {
   } = useProjectsStore()
 
   const { getDateRange, getPeriodLabel } = useTimePeriodStore()
-  const { selectedEngineerId } = useSelectedEngineerStore()
+  // selectedEngineerId already destructured above
 
   // Local state for toggles
   const [dataSources, setDataSources] = useState<DataSource[]>(['serviceDesk', 'projects'])
@@ -85,18 +85,34 @@ export default function Dashboard() {
       const inDateRange = d >= dateRange.start! && d <= dateRange.end!
       if (!inDateRange) return false
 
-      // 2. Engineer Filter
+      // 2. Team Filter
+      if (selectedTeam !== 'All Company') {
+        const teamMembers = TEAM_DEFINITIONS[selectedTeam]
+        // Find member to check identifier
+        const member = members.find(m => m.id === e.memberId)
+        if (!member || !teamMembers?.includes(member.identifier.toLowerCase())) return false
+      }
+
+      // 3. Engineer Filter
       if (selectedEngineerId && e.memberId !== selectedEngineerId) return false
 
       return true
     }).sort((a, b) => new Date(b.dateStart).getTime() - new Date(a.dateStart).getTime())
-  }, [entries, dateRange, selectedEngineerId])
+  }, [entries, dateRange, selectedEngineerId, selectedTeam, members])
 
   // Filter Service Tickets
   const filteredServiceTickets = useMemo(() => {
     if (!dateRange.start || !dateRange.end) return serviceTickets
 
     return serviceTickets.filter(t => {
+      // Team Filter
+      if (selectedTeam !== 'All Company') {
+        const teamMembers = TEAM_DEFINITIONS[selectedTeam] || []
+        const isOwnerInTeam = teamMembers.some(id => id.toLowerCase() === t.owner?.toLowerCase())
+        const isResourceInTeam = t.resources && teamMembers.some(id => t.resources?.toLowerCase().includes(id.toLowerCase()))
+        if (!isOwnerInTeam && !isResourceInTeam) return false
+      }
+
       // Engineer Filter
       if (selectedEngineerId) {
         const member = members.find(m => m.id === selectedEngineerId)
@@ -115,13 +131,19 @@ export default function Dashboard() {
       }
       return true
     })
-  }, [serviceTickets, dateRange, selectedEngineerId, members])
+  }, [serviceTickets, dateRange, selectedEngineerId, selectedTeam, members])
 
   // Filter Projects
   const filteredProjects = useMemo(() => {
     if (!dateRange.start || !dateRange.end) return projects
 
     return projects.filter(p => {
+      // Team Filter
+      if (selectedTeam !== 'All Company') {
+        const teamMembers = TEAM_DEFINITIONS[selectedTeam] || []
+        if (p.managerIdentifier && !teamMembers.includes(p.managerIdentifier.toLowerCase())) return false
+      }
+
       // Engineer Filter (Manager)
       if (selectedEngineerId) {
         const member = members.find(m => m.id === selectedEngineerId)
@@ -131,13 +153,20 @@ export default function Dashboard() {
       }
       return true
     })
-  }, [projects, selectedEngineerId, members, dateRange])
+  }, [projects, selectedEngineerId, selectedTeam, members, dateRange])
 
   // Filter Project Tickets
   const filteredProjectTickets = useMemo(() => {
     if (!dateRange.start || !dateRange.end) return projectTickets
 
     return projectTickets.filter(t => {
+      // Team Filter
+      if (selectedTeam !== 'All Company') {
+        const teamMembers = TEAM_DEFINITIONS[selectedTeam] || []
+        const isResourceInTeam = t.resources && teamMembers.some(id => t.resources?.toLowerCase().includes(id.toLowerCase()))
+        if (!isResourceInTeam) return false
+      }
+
       // Engineer Filter (Resources)
       if (selectedEngineerId) {
         const member = members.find(m => m.id === selectedEngineerId)
@@ -155,7 +184,7 @@ export default function Dashboard() {
       }
       return true
     })
-  }, [projectTickets, selectedEngineerId, members, dateRange])
+  }, [projectTickets, selectedEngineerId, selectedTeam, members, dateRange])
 
 
   // Calculate Stats
@@ -207,7 +236,6 @@ export default function Dashboard() {
         </div>
 
         <div className="flex flex-col sm:flex-row gap-4 sm:items-end">
-          <TeamFilter />
           <DataSourceFilter selected={dataSources} onChange={setDataSources} className="sm:self-end" />
         </div>
       </div>

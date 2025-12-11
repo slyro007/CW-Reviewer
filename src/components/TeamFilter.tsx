@@ -1,24 +1,10 @@
 
-import { useState } from 'react'
 import { useMembersStore } from '@/stores/membersStore'
-import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
-
-// Define the team structures using identifiers
-const TEAM_DEFINITIONS = {
-    'All Company': null, // null means all
-    'Service Desk': ['dcooper', 'scano', 'kmoreno'],
-    'Professional Services': ['ehammond', 'dsolomon'],
-    'Professional Services + Management': ['bwolff', 'pcounts', 'ehammond', 'dsolomon'],
-    'Management': ['bwolff', 'pcounts']
-}
-
-type TeamName = keyof typeof TEAM_DEFINITIONS
+import { useSelectedEngineerStore, TEAM_DEFINITIONS, type TeamName } from '@/stores/selectedEngineerStore'
 
 export default function TeamFilter() {
     const { members } = useMembersStore()
-    const { selectedEngineerId, setSelectedEngineer } = useSelectedEngineerStore()
-
-    const [selectedTeam, setSelectedTeam] = useState<TeamName>('All Company')
+    const { selectedEngineerId, setSelectedEngineer, selectedTeam, setSelectedTeam } = useSelectedEngineerStore()
 
     // Derive the list of available engineers based on the selected team
     const availableEngineers = members.filter(member => {

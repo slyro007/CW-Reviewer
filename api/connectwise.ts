@@ -477,6 +477,17 @@ class ConnectWiseClient {
       fields: options.fields || 'id,summary,project/id,project/name,phase/id,phase/name,board/id,board/name,status/name,company/name,resources,closedFlag,priority/name,type/name,wbsCode,actualHours,budgetHours,dateEntered,closedDate',
     })
   }
+  /**
+   * Fetch audit trail for a specific member/record
+   * This is used to find history of changes (e.g. who closed a project)
+   */
+  async getAuditTrail(type: string, id: number, options: RequestOptions = {}): Promise<any[]> {
+    return this.requestAllPages<any[]>(`/system/auditTrail`, {
+      ...options,
+      conditions: `type="${type}" AND id=${id}`,
+      orderBy: 'dateEntered desc',
+    })
+  }
 }
 
 export default ConnectWiseClient

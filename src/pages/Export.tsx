@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react'
-import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
+import { useSelectedEngineerStore, TEAM_DEFINITIONS } from '@/stores/selectedEngineerStore'
 import { useMembersStore } from '@/stores/membersStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
 import { useTicketsStore } from '@/stores/ticketsStore'
@@ -10,12 +10,12 @@ import { format } from 'date-fns'
 type ExportFormat = 'csv' | 'pdf' | 'ai-summary'
 
 export default function Export() {
-  const { selectedEngineerId } = useSelectedEngineerStore()
+  const { selectedEngineerId, selectedTeam } = useSelectedEngineerStore()
   const { members } = useMembersStore()
   const { entries, fetchTimeEntries } = useTimeEntriesStore()
   const { tickets } = useTicketsStore()
   const { getDateRange, getPeriodLabel } = useTimePeriodStore()
-  
+
   const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('csv')
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
@@ -26,7 +26,7 @@ export default function Export() {
   const dateRange = getDateRange()
   const periodLabel = getPeriodLabel()
 
-  const selectedEngineer = selectedEngineerId 
+  const selectedEngineer = selectedEngineerId
     ? members.find(m => m.id === selectedEngineerId)
     : null
 
@@ -44,11 +44,17 @@ export default function Export() {
       const entryDate = new Date(e.dateStart)
       return entryDate >= dateRange.start && entryDate <= dateRange.end
     })
-    
+
     if (selectedEngineerId !== null) {
       result = result.filter(e => e.memberId === selectedEngineerId)
+    } else if (selectedTeam !== 'All Company') {
+      const teamIdentifiers = TEAM_DEFINITIONS[selectedTeam] || []
+      result = result.filter(e => {
+        const member = members.find(m => m.id === e.memberId)
+        return member && teamIdentifiers.includes(member.identifier.toLowerCase())
+      })
     }
-    
+
     return result
   }, [entries, dateRange, selectedEngineerId])
 
@@ -74,7 +80,7 @@ export default function Export() {
   const exportCSV = () => {
     const headers = ['Date', 'Engineer', 'Hours', 'Billable', 'Ticket ID']
     if (includeNotes) headers.push('Notes')
-    
+
     const rows = filteredEntries.map(entry => {
       const member = members.find(m => m.id === entry.memberId)
       const row = [
@@ -87,12 +93,12 @@ export default function Export() {
       if (includeNotes) row.push(entry.notes?.replace(/"/g, '""') || '')
       return row
     })
-    
+
     const csvContent = [
       headers.join(','),
       ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
     ].join('\n')
-    
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
@@ -126,7 +132,7 @@ export default function Export() {
         <h1>Time Entry Report</h1>
         <div class="meta">
           <p><strong>Period:</strong> ${format(dateRange.start, 'MMM d, yyyy')} - ${format(dateRange.end, 'MMM d, yyyy')}</p>
-          <p><strong>Engineer:</strong> ${selectedEngineer ? `${selectedEngineer.firstName} ${selectedEngineer.lastName}` : 'All Engineers'}</p>
+          <p><strong>Engineer/Team:</strong> ${selectedEngineer ? `${selectedEngineer.firstName} ${selectedEngineer.lastName}` : selectedTeam}</p>
           <p><strong>Generated:</strong> ${format(new Date(), 'MMM d, yyyy h:mm a')}</p>
         </div>
         
@@ -161,8 +167,8 @@ export default function Export() {
           </thead>
           <tbody>
             ${filteredEntries.slice(0, 100).map(entry => {
-              const member = members.find(m => m.id === entry.memberId)
-              return `
+      const member = members.find(m => m.id === entry.memberId)
+      return `
                 <tr>
                   <td>${format(new Date(entry.dateStart), 'yyyy-MM-dd')}</td>
                   <td>${member ? `${member.firstName} ${member.lastName}` : 'Unknown'}</td>
@@ -172,14 +178,14 @@ export default function Export() {
                   ${includeNotes ? `<td>${entry.notes?.substring(0, 100) || '-'}${entry.notes && entry.notes.length > 100 ? '...' : ''}</td>` : ''}
                 </tr>
               `
-            }).join('')}
+    }).join('')}
           </tbody>
         </table>
         ${filteredEntries.length > 100 ? `<p><em>Showing first 100 of ${filteredEntries.length} entries</em></p>` : ''}
       </body>
       </html>
     `
-    
+
     const printWindow = window.open('', '_blank')
     if (printWindow) {
       printWindow.document.write(printContent)
@@ -192,17 +198,17 @@ export default function Export() {
   const generateAISummary = async () => {
     setIsExporting(true)
     setExportError(null)
-    
+
     try {
       const response = await api.generateAnalysis('quarterlySummary', {
-        member: selectedEngineer || { firstName: 'Team', lastName: '' },
+        member: selectedEngineer || { firstName: selectedTeam !== 'All Company' ? selectedTeam : 'All Engineers', lastName: '' },
         entries: filteredEntries.slice(0, 100),
-        tickets: includeTickets ? tickets.filter(t => 
+        tickets: includeTickets ? tickets.filter(t =>
           filteredEntries.some(e => e.ticketId === t.id)
         ).slice(0, 50) : [],
         period: { start: dateRange.start, end: dateRange.end },
       })
-      
+
       setAiSummary(response.analysis)
     } catch (error: any) {
       console.error('Error generating summary:', error)
@@ -215,7 +221,7 @@ export default function Export() {
   // Handle export
   const handleExport = async () => {
     setExportError(null)
-    
+
     switch (selectedFormat) {
       case 'csv':
         exportCSV()
@@ -234,9 +240,9 @@ export default function Export() {
       <div className="mb-6">
         <h2 className="text-3xl font-bold text-white mb-2">Export Data</h2>
         <p className="text-gray-400">
-          {selectedEngineer 
+          {selectedEngineer
             ? `Export data for ${selectedEngineer.firstName} ${selectedEngineer.lastName}`
-            : 'Export data for all engineers'}
+            : `Export data for ${selectedTeam}`}
           {' • '}<span className="text-blue-400">{periodLabel}</span>
         </p>
       </div>
@@ -245,7 +251,7 @@ export default function Export() {
         {/* Export Options */}
         <div className="bg-gray-800 rounded-lg p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Export Options</h3>
-          
+
           {/* Format Selection */}
           <div className="mb-6">
             <label className="block text-sm font-medium text-gray-300 mb-2">Export Format</label>
@@ -258,11 +264,10 @@ export default function Export() {
                 <button
                   key={format.value}
                   onClick={() => setSelectedFormat(format.value as ExportFormat)}
-                  className={`p-3 rounded-lg text-center transition-colors ${
-                    selectedFormat === format.value
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                  }`}
+                  className={`p-3 rounded-lg text-center transition-colors ${selectedFormat === format.value
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                    }`}
                 >
                   <span className="text-sm font-medium">{format.label}</span>
                 </button>
@@ -296,11 +301,10 @@ export default function Export() {
           <button
             onClick={handleExport}
             disabled={isExporting || filteredEntries.length === 0}
-            className={`w-full py-3 rounded-lg font-medium transition-colors ${
-              isExporting || filteredEntries.length === 0
-                ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700 text-white'
-            }`}
+            className={`w-full py-3 rounded-lg font-medium transition-colors ${isExporting || filteredEntries.length === 0
+              ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+              : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
           >
             {isExporting ? (
               <span className="flex items-center justify-center gap-2">
@@ -324,7 +328,7 @@ export default function Export() {
         {/* Preview / Summary */}
         <div className="bg-gray-800 rounded-lg p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Export Preview</h3>
-          
+
           {/* Stats */}
           <div className="grid grid-cols-2 gap-4 mb-6">
             <div className="bg-gray-700 rounded-lg p-4">
@@ -365,11 +369,10 @@ export default function Export() {
                       </td>
                       <td className="py-2 text-gray-300">{entry.hours}</td>
                       <td className="py-2">
-                        <span className={`px-1.5 py-0.5 rounded text-xs ${
-                          entry.billableOption === 'Billable'
-                            ? 'bg-green-600/20 text-green-400'
-                            : 'bg-gray-600 text-gray-400'
-                        }`}>
+                        <span className={`px-1.5 py-0.5 rounded text-xs ${entry.billableOption === 'Billable'
+                          ? 'bg-green-600/20 text-green-400'
+                          : 'bg-gray-600 text-gray-400'
+                          }`}>
                           {entry.billableOption || 'N/A'}
                         </span>
                       </td>

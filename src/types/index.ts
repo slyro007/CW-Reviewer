@@ -84,6 +84,8 @@ export interface Project {
   type?: string
   closedFlag: boolean
   description?: string
+  auditClosedBy?: string
+  auditClosedDate?: Date
 }
 
 // ConnectWise Project Ticket types (from /project/tickets API)

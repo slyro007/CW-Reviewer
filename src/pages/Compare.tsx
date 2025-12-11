@@ -4,6 +4,7 @@ import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
 import { useTicketsStore } from '@/stores/ticketsStore'
 import { useProjectsStore } from '@/stores/projectsStore'
 import { useTimePeriodStore } from '@/stores/timePeriodStore'
+import { useSelectedEngineerStore, TEAM_DEFINITIONS } from '@/stores/selectedEngineerStore'
 import DataSourceFilter, { useDataSources, type DataSource } from '@/components/DataSourceFilter'
 import { api } from '@/lib/api'
 import { format } from 'date-fns'
@@ -54,10 +55,17 @@ export default function Compare() {
   const [insightError, setInsightError] = useState<string | null>(null)
   const [parsedInsights, setParsedInsights] = useState<AIComparisonResult | null>(null)
 
+  const { selectedTeam } = useSelectedEngineerStore()
   const { dataSources, setDataSources, includesServiceDesk, includesProjects } = useDataSources()
 
   const dateRange = getDateRange()
   const periodLabel = getPeriodLabel()
+
+  const availableMembers = useMemo(() => {
+    if (selectedTeam === 'All Company') return members
+    const allowed = TEAM_DEFINITIONS[selectedTeam]
+    return members.filter(m => allowed?.some(id => id.toLowerCase() === m.identifier.toLowerCase()))
+  }, [members, selectedTeam])
 
   useEffect(() => {
     fetchServiceBoardTickets()
@@ -237,7 +245,7 @@ export default function Compare() {
   }
 
   const selectAll = () => {
-    members.forEach(m => {
+    availableMembers.forEach(m => {
       if (!selectedMembers.includes(m.id)) {
         toggleMemberSelection(m.id)
       }
@@ -267,7 +275,7 @@ export default function Compare() {
           </div>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
-          {members.map((member) => (
+          {availableMembers.map((member) => (
             <label key={member.id} className={`flex items-center space-x-2 p-2 rounded cursor-pointer transition-colors ${selectedMembers.includes(member.id) ? 'bg-blue-600/20 border border-blue-500' : 'bg-gray-700 hover:bg-gray-600 border border-transparent'}`}>
               <input type="checkbox" checked={selectedMembers.includes(member.id)} onChange={() => toggleMemberSelection(member.id)} className="rounded border-gray-600 text-blue-600 focus:ring-blue-500" />
               <span className="text-white text-sm truncate" style={{ borderLeftWidth: selectedMembers.includes(member.id) ? 3 : 0, borderLeftColor: COLORS[selectedMembers.indexOf(member.id) % COLORS.length], paddingLeft: selectedMembers.includes(member.id) ? 8 : 0 }}>

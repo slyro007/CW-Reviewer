@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
+import { useSelectedEngineerStore, TEAM_DEFINITIONS } from '@/stores/selectedEngineerStore'
 import { useMembersStore } from '@/stores/membersStore'
 import { useProjectsStore } from '@/stores/projectsStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
@@ -49,13 +49,13 @@ const TICKET_STATUS_COLORS: Record<string, string> = {
 }
 
 export default function Projects() {
-  const { selectedEngineerId } = useSelectedEngineerStore()
+  const { selectedEngineerId, selectedTeam } = useSelectedEngineerStore()
   const { members } = useMembersStore()
-  const { 
-    projects, projectTickets, 
-    isLoading, isLoadingTickets, error, 
-    fetchProjects, fetchProjectTickets, 
-    getProjectStats, getProjectTicketStats 
+  const {
+    projects, projectTickets,
+    isLoading, isLoadingTickets, error,
+    fetchProjects, fetchProjectTickets,
+    getProjectStats, getProjectTicketStats
   } = useProjectsStore()
   const { entries } = useTimeEntriesStore()
   const { getPeriodLabel, getDateRange } = useTimePeriodStore()
@@ -70,7 +70,7 @@ export default function Projects() {
   const periodLabel = getPeriodLabel()
   const dateRange = getDateRange()
 
-  const selectedEngineer = selectedEngineerId 
+  const selectedEngineer = selectedEngineerId
     ? members.find(m => m.id === selectedEngineerId)
     : null
 
@@ -103,9 +103,14 @@ export default function Projects() {
           .filter(e => e.memberId === selectedEngineer.id && e.projectId !== null && e.projectId !== undefined)
           .map(e => e.projectId!)
       )
-      result = result.filter(p => 
+      result = result.filter(p =>
         p.managerIdentifier?.toLowerCase() === identifier ||
         timeEntryProjectIds.has(p.id)
+      )
+    } else if (selectedTeam !== 'All Company') {
+      const teamIdentifiers = TEAM_DEFINITIONS[selectedTeam] || []
+      result = result.filter(p =>
+        p.managerIdentifier && teamIdentifiers.includes(p.managerIdentifier.toLowerCase())
       )
     }
 
@@ -115,7 +120,7 @@ export default function Projects() {
 
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
-      result = result.filter(p => 
+      result = result.filter(p =>
         p.name?.toLowerCase().includes(query) ||
         p.id.toString().includes(query) ||
         p.company?.toLowerCase().includes(query)
@@ -123,7 +128,7 @@ export default function Projects() {
     }
 
     return result
-  }, [projects, selectedEngineer, statusFilter, searchQuery, entries])
+  }, [projects, selectedEngineer, selectedTeam, statusFilter, searchQuery, entries])
 
   // Filter project tickets based on engineer, date range, and filters
   const filteredTickets = useMemo(() => {
@@ -143,8 +148,13 @@ export default function Projects() {
 
     // Filter by selected engineer (resources)
     if (selectedEngineer) {
-      result = result.filter(t => 
+      result = result.filter(t =>
         t.resources?.toLowerCase().includes(selectedEngineer.identifier.toLowerCase())
+      )
+    } else if (selectedTeam !== 'All Company') {
+      const teamIdentifiers = TEAM_DEFINITIONS[selectedTeam] || []
+      result = result.filter(t =>
+        t.resources && teamIdentifiers.some(id => t.resources?.toLowerCase().includes(id.toLowerCase()))
       )
     }
 
@@ -154,7 +164,7 @@ export default function Projects() {
 
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase()
-      result = result.filter(t => 
+      result = result.filter(t =>
         t.summary?.toLowerCase().includes(query) ||
         t.id.toString().includes(query) ||
         t.projectName?.toLowerCase().includes(query) ||
@@ -236,7 +246,7 @@ export default function Projects() {
   const generateAIAnalysis = async () => {
     setIsGeneratingAnalysis(true)
     setAnalysisError(null)
-    
+
     try {
       const projectData = {
         period: periodLabel,
@@ -281,7 +291,7 @@ Keep the tone professional and actionable.`
         prompt,
         data: projectData,
       })
-      
+
       setAiAnalysis(response.analysis)
     } catch (error: any) {
       console.error('Error generating analysis:', error)
@@ -298,7 +308,7 @@ Keep the tone professional and actionable.`
       <div className="mb-6">
         <h2 className="text-3xl font-bold text-white mb-2">Project Analytics</h2>
         <p className="text-gray-400">
-          {selectedEngineer 
+          {selectedEngineer
             ? `Projects ${viewMode === 'projects' ? 'managed by' : 'with tickets assigned to'} ${selectedEngineer.firstName} ${selectedEngineer.lastName}`
             : 'All projects across engineers'}
         </p>
@@ -312,23 +322,21 @@ Keep the tone professional and actionable.`
 
       {/* View Mode Toggle */}
       <div className="flex gap-2 mb-6">
-          <button
+        <button
           onClick={() => { setViewMode('projects'); setStatusFilter('all'); setSelectedProjectId(null); }}
-          className={`px-4 py-2 rounded-lg font-medium transition-all ${
-            viewMode === 'projects'
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-          }`}
+          className={`px-4 py-2 rounded-lg font-medium transition-all ${viewMode === 'projects'
+            ? 'bg-blue-600 text-white'
+            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
         >
           Projects ({projects.length})
         </button>
         <button
           onClick={() => { setViewMode('tickets'); setStatusFilter('all'); }}
-          className={`px-4 py-2 rounded-lg font-medium transition-all ${
-            viewMode === 'tickets'
-              ? 'bg-blue-600 text-white'
-              : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-          }`}
+          className={`px-4 py-2 rounded-lg font-medium transition-all ${viewMode === 'tickets'
+            ? 'bg-blue-600 text-white'
+            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+            }`}
         >
           Project Tickets ({projectTickets.length})
         </button>
@@ -418,12 +426,12 @@ Keep the tone professional and actionable.`
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1f2937', 
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1f2937',
                       border: '1px solid #374151',
                       borderRadius: '8px',
-                      color: '#fff' 
+                      color: '#fff'
                     }}
                   />
                 </PieChart>
@@ -443,25 +451,25 @@ Keep the tone professional and actionable.`
           </h3>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart 
-                data={viewMode === 'projects' ? engineerDistribution : phaseDistribution.slice(0, 8)} 
+              <BarChart
+                data={viewMode === 'projects' ? engineerDistribution : phaseDistribution.slice(0, 8)}
                 layout="vertical"
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                 <XAxis type="number" stroke="#9ca3af" />
-                <YAxis 
-                  type="category" 
-                  dataKey="name" 
-                  stroke="#9ca3af" 
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  stroke="#9ca3af"
                   width={120}
                   tick={{ fontSize: 11 }}
                 />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#1f2937', 
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#1f2937',
                     border: '1px solid #374151',
                     borderRadius: '8px',
-                    color: '#fff' 
+                    color: '#fff'
                   }}
                 />
                 <Bar dataKey="value" fill="#3b82f6" radius={[0, 4, 4, 0]} />
@@ -480,21 +488,21 @@ Keep the tone professional and actionable.`
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={companyDistribution}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis 
-                    dataKey="name" 
-                    stroke="#9ca3af" 
+                  <XAxis
+                    dataKey="name"
+                    stroke="#9ca3af"
                     tick={{ fontSize: 10 }}
                     angle={-45}
                     textAnchor="end"
                     height={60}
                   />
                   <YAxis stroke="#9ca3af" />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#1f2937', 
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1f2937',
                       border: '1px solid #374151',
                       borderRadius: '8px',
-                      color: '#fff' 
+                      color: '#fff'
                     }}
                   />
                   <Bar dataKey="value" name="Projects" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
@@ -520,8 +528,8 @@ Keep the tone professional and actionable.`
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={viewMode === 'projects' 
-                ? "Search by project name, ID, or client..." 
+              placeholder={viewMode === 'projects'
+                ? "Search by project name, ID, or client..."
                 : "Search by ticket summary, ID, project, or phase..."}
               className="w-full bg-gray-700 text-white rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
             />
@@ -567,7 +575,7 @@ Keep the tone professional and actionable.`
           <h3 className="text-lg font-semibold text-white mb-4">
             Projects ({filteredProjects.length})
           </h3>
-          
+
           {isPageLoading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
@@ -575,7 +583,7 @@ Keep the tone professional and actionable.`
             </div>
           ) : filteredProjects.length === 0 ? (
             <p className="text-gray-400 text-center py-8">
-              {searchQuery || statusFilter !== 'all' 
+              {searchQuery || statusFilter !== 'all'
                 ? 'No projects match your filters'
                 : 'No projects found'}
             </p>
@@ -609,15 +617,21 @@ Keep the tone professional and actionable.`
                         <span className="text-sm text-gray-300">{project.company || 'N/A'}</span>
                       </td>
                       <td className="py-3 px-4">
-                        <span 
+                        <span
                           className="px-2 py-1 rounded text-xs font-medium"
-                          style={{ 
+                          style={{
                             backgroundColor: `${STATUS_COLORS[project.status] || '#6b7280'}20`,
                             color: STATUS_COLORS[project.status] || '#9ca3af'
                           }}
                         >
                           {project.status}
                         </span>
+                        {(project.auditClosedBy || project.auditClosedDate) && (project.status === 'Closed' || project.status === 'Ready to Close') && (
+                          <div className="text-[10px] text-gray-400 mt-1 leading-tight">
+                            {project.auditClosedBy && <div>by {project.auditClosedBy}</div>}
+                            {project.auditClosedDate && <div>on {format(project.auditClosedDate, 'MMM d')}</div>}
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-4">
                         <span className="text-sm text-gray-300">
@@ -627,8 +641,8 @@ Keep the tone professional and actionable.`
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2">
                           <div className="w-16 bg-gray-700 rounded-full h-2">
-                            <div 
-                              className="bg-blue-500 h-2 rounded-full" 
+                            <div
+                              className="bg-blue-500 h-2 rounded-full"
                               style={{ width: `${Math.min(project.percentComplete || 0, 100)}%` }}
                             />
                           </div>
@@ -677,7 +691,7 @@ Keep the tone professional and actionable.`
               </span>
             )}
           </h3>
-          
+
           {isPageLoading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-4"></div>
@@ -715,9 +729,9 @@ Keep the tone professional and actionable.`
                               )}
                             </div>
                           </div>
-                          <span 
+                          <span
                             className="px-2 py-1 rounded text-xs font-medium ml-4"
-                            style={{ 
+                            style={{
                               backgroundColor: `${TICKET_STATUS_COLORS[ticket.status] || '#6b7280'}20`,
                               color: TICKET_STATUS_COLORS[ticket.status] || '#9ca3af'
                             }}
@@ -749,11 +763,10 @@ Keep the tone professional and actionable.`
           <button
             onClick={generateAIAnalysis}
             disabled={isGeneratingAnalysis || (filteredProjects.length === 0 && filteredTickets.length === 0)}
-            className={`px-5 py-2.5 rounded-lg font-medium transition-all ${
-              isGeneratingAnalysis || (filteredProjects.length === 0 && filteredTickets.length === 0)
-                ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
-            }`}
+            className={`px-5 py-2.5 rounded-lg font-medium transition-all ${isGeneratingAnalysis || (filteredProjects.length === 0 && filteredTickets.length === 0)
+              ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+              : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl'
+              }`}
           >
             {isGeneratingAnalysis ? (
               <span className="flex items-center gap-2">
@@ -765,13 +778,13 @@ Keep the tone professional and actionable.`
             )}
           </button>
         </div>
-        
+
         {analysisError && (
           <div className="bg-red-600/20 border border-red-500 rounded-lg p-4 mb-4">
             <p className="text-red-400">{analysisError}</p>
           </div>
         )}
-        
+
         {aiAnalysis ? (
           <div className="bg-gradient-to-br from-gray-700 to-gray-750 rounded-lg p-6 border border-gray-600">
             <div className="whitespace-pre-wrap text-gray-200 leading-relaxed">
