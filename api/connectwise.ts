@@ -30,11 +30,11 @@ class ConnectWiseClient {
     if (!config) {
       throw new Error('ConnectWiseConfig is required')
     }
-    
+
     if (!config.clientId || !config.publicKey || !config.privateKey || !config.baseUrl || !config.companyId) {
       throw new Error('All ConnectWise config fields are required: clientId, publicKey, privateKey, baseUrl, companyId')
     }
-    
+
     this.config = config
   }
 
@@ -51,32 +51,32 @@ class ConnectWiseClient {
     // According to docs: https://ConnectWiseSite/login/companyinfo/CompanyId
     // This is a fallback and may be unreliable in serverless environments
     console.log('[ConnectWise] No CW_CODEBASE env var found, attempting dynamic detection...')
-    
+
     try {
       // Handle both api-na.myconnectwise.net and na.myconnectwise.net formats
       let siteUrl = this.config.baseUrl.replace('https://', '')
-      
+
       // If baseUrl contains 'api-', remove it for companyinfo endpoint
       // Otherwise, use as-is (for on-premise or direct URLs)
       if (siteUrl.startsWith('api-')) {
         siteUrl = siteUrl.replace('api-', '')
       }
-      
+
       const companyInfoUrl = `https://${siteUrl}/login/companyinfo/${this.config.companyId}`
       console.log('[ConnectWise] Fetching codebase from:', companyInfoUrl)
-      
+
       // Add timeout to prevent hanging in serverless environment
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
-      
+
       try {
         const response = await fetch(companyInfoUrl, {
           signal: controller.signal
         })
         clearTimeout(timeoutId)
-        
+
         console.log('[ConnectWise] Codebase response status:', response.status)
-        
+
         if (response.ok) {
           const info = await response.json()
           // Cloud returns versioned codebase like "v2017_3/", on-premise returns "v4_6_release/"
@@ -100,7 +100,7 @@ class ConnectWiseClient {
       // If we can't determine, default to v4_6_release
       console.warn('[ConnectWise] Could not determine codebase, using default:', error)
     }
-    
+
     console.log('[ConnectWise] Using default codebase: v4_6_release/')
     return 'v4_6_release/'
   }
@@ -113,47 +113,47 @@ class ConnectWiseClient {
     if (!endpoint || typeof endpoint !== 'string') {
       throw new Error('Endpoint must be a non-empty string')
     }
-    
+
     const { page = 1, pageSize = 1000, conditions, orderBy, fields } = options
-    
+
     // Validate config is still present
     if (!this.config || !this.config.baseUrl) {
       throw new Error('ConnectWise client configuration is missing')
     }
-    
+
     // Get the correct codebase (cache it to avoid repeated calls)
     if (!this.codebase) {
       this.codebase = await this.getCodebase()
     }
-    
+
     // Validate codebase
     if (!this.codebase) {
       throw new Error('Failed to determine ConnectWise codebase')
     }
-    
+
     try {
       const url = new URL(`${this.config.baseUrl}/${this.codebase}apis/3.0${endpoint}`)
       console.log('[ConnectWise] Request URL:', url.toString())
-    url.searchParams.append('page', page.toString())
-    url.searchParams.append('pageSize', pageSize.toString())
-    if (conditions) {
-      url.searchParams.append('conditions', conditions)
-    }
-    if (orderBy) {
-      url.searchParams.append('orderBy', orderBy)
-    }
-    if (fields) {
-      url.searchParams.append('fields', fields)
-    }
+      url.searchParams.append('page', page.toString())
+      url.searchParams.append('pageSize', pageSize.toString())
+      if (conditions) {
+        url.searchParams.append('conditions', conditions)
+      }
+      if (orderBy) {
+        url.searchParams.append('orderBy', orderBy)
+      }
+      if (fields) {
+        url.searchParams.append('fields', fields)
+      }
 
       // Create base64 auth string (Node.js/Vercel serverless environment)
       const authString = `${this.config.companyId}+${this.config.publicKey}:${this.config.privateKey}`
-      
+
       // Validate auth string components
       if (!this.config.companyId || !this.config.publicKey || !this.config.privateKey) {
         throw new Error('Missing authentication credentials')
       }
-      
+
       // Buffer is always available in Node.js/Vercel serverless
       const auth = Buffer.from(authString).toString('base64')
 
@@ -184,7 +184,7 @@ class ConnectWiseClient {
         } catch (parseError) {
           console.warn('[ConnectWise] Could not parse error response')
         }
-        
+
         console.error('[ConnectWise] API Error:', {
           endpoint,
           status: response.status,
@@ -192,7 +192,7 @@ class ConnectWiseClient {
           errorText,
           url: url.toString(),
         })
-        
+
         throw new Error(`ConnectWise API error (${response.status}): ${errorText}`)
       }
 
@@ -262,7 +262,7 @@ class ConnectWiseClient {
     const conditions = 'inactiveFlag=false'
     return this.requestAllPages<any[]>('/system/members', {
       ...options,
-      conditions: options.conditions 
+      conditions: options.conditions
         ? `${conditions} AND ${options.conditions}`
         : conditions,
       fields: options.fields || 'id,identifier,firstName,lastName,emailAddress,inactiveFlag',
@@ -282,7 +282,7 @@ class ConnectWiseClient {
     modifiedSince?: Date
   ): Promise<any[]> {
     let conditions = ''
-    
+
     if (startDate || endDate) {
       const dateConditions: string[] = []
       if (startDate) {
@@ -296,7 +296,7 @@ class ConnectWiseClient {
 
     if (memberIds && memberIds.length > 0) {
       const memberCondition = `member/id IN (${memberIds.join(',')})`
-      conditions = conditions 
+      conditions = conditions
         ? `${conditions} AND ${memberCondition}`
         : memberCondition
     }
@@ -304,7 +304,7 @@ class ConnectWiseClient {
     // Incremental sync: only fetch records modified since last sync
     if (modifiedSince) {
       const modifiedCondition = `_info/lastUpdated > [${modifiedSince.toISOString()}]`
-      conditions = conditions 
+      conditions = conditions
         ? `${conditions} AND ${modifiedCondition}`
         : modifiedCondition
       console.log(`[ConnectWise] Incremental sync: fetching time entries modified since ${modifiedSince.toISOString()}`)
@@ -326,11 +326,12 @@ class ConnectWiseClient {
     boardIds?: number[],
     startDate?: Date,
     endDate?: Date,
+    memberIdentifiers?: string[],
     options: RequestOptions = {},
     modifiedSince?: Date
   ): Promise<any[]> {
     let conditions = ''
-    
+
     if (boardIds && boardIds.length > 0) {
       conditions = `board/id IN (${boardIds.join(',')})`
     }
@@ -344,15 +345,31 @@ class ConnectWiseClient {
         dateConditions.push(`dateEntered <= [${endDate.toISOString()}]`)
       }
       const dateCondition = dateConditions.join(' AND ')
-      conditions = conditions 
+      conditions = conditions
         ? `${conditions} AND ${dateCondition}`
         : dateCondition
+    }
+
+    // Build member filter conditions
+    if (memberIdentifiers && memberIdentifiers.length > 0) {
+      // Filter by owner OR resources (team member)
+      // We use team/identifier for resources condition
+      const memberConditions: string[] = []
+      memberIdentifiers.forEach(id => {
+        memberConditions.push(`owner/identifier="${id}"`)
+        memberConditions.push(`resources like "%${id}%"`)
+      })
+
+      const memberRefFilter = `(${memberConditions.join(' OR ')})`
+      conditions = conditions
+        ? `${conditions} AND ${memberRefFilter}`
+        : memberRefFilter
     }
 
     // Incremental sync: only fetch records modified since last sync
     if (modifiedSince) {
       const modifiedCondition = `_info/lastUpdated > [${modifiedSince.toISOString()}]`
-      conditions = conditions 
+      conditions = conditions
         ? `${conditions} AND ${modifiedCondition}`
         : modifiedCondition
       console.log(`[ConnectWise] Incremental sync: fetching tickets modified since ${modifiedSince.toISOString()}`)
@@ -374,7 +391,7 @@ class ConnectWiseClient {
     const conditions = type ? `name LIKE '%${type}%'` : undefined
     return this.requestAllPages<any[]>('/service/boards', {
       ...options,
-      conditions: options.conditions 
+      conditions: options.conditions
         ? (conditions ? `${conditions} AND ${options.conditions}` : options.conditions)
         : conditions,
       fields: options.fields || 'id,name',
@@ -392,7 +409,7 @@ class ConnectWiseClient {
     modifiedSince?: Date
   ): Promise<any[]> {
     let conditions = ''
-    
+
     if (managerIds && managerIds.length > 0) {
       // Filter by manager identifier
       const managerConditions = managerIds.map(id => `manager/identifier='${id}'`).join(' OR ')
@@ -402,7 +419,7 @@ class ConnectWiseClient {
     // Incremental sync: only fetch records modified since last sync
     if (modifiedSince) {
       const modifiedCondition = `_info/lastUpdated > [${modifiedSince.toISOString()}]`
-      conditions = conditions 
+      conditions = conditions
         ? `${conditions} AND ${modifiedCondition}`
         : modifiedCondition
       console.log(`[ConnectWise] Incremental sync: fetching projects modified since ${modifiedSince.toISOString()}`)
@@ -438,7 +455,7 @@ class ConnectWiseClient {
     modifiedSince?: Date
   ): Promise<any[]> {
     let conditions = ''
-    
+
     if (projectId) {
       conditions = `project/id=${projectId}`
     }
@@ -446,7 +463,7 @@ class ConnectWiseClient {
     // Incremental sync: only fetch records modified since last sync
     if (modifiedSince) {
       const modifiedCondition = `_info/lastUpdated > [${modifiedSince.toISOString()}]`
-      conditions = conditions 
+      conditions = conditions
         ? `${conditions} AND ${modifiedCondition}`
         : modifiedCondition
       console.log(`[ConnectWise] Incremental sync: fetching project tickets modified since ${modifiedSince.toISOString()}`)

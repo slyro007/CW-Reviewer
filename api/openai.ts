@@ -39,9 +39,13 @@ const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
     name: 'quarterlySummary',
     systemPrompt: `You are an expert at creating comprehensive quarterly summaries for MSP engineers.
     Summarize their work, achievements, and areas for improvement in a clear, professional format.`,
-    userPrompt: (data: { entries: any[]; tickets: any[]; member: any; period: { start: Date; end: Date } }) => {
+    userPrompt: (data: { entries: any[]; tickets: any[]; member: any; period: { start: Date | string; end: Date | string } }) => {
+      // Handle both Date objects and ISO strings (from JSON serialization)
+      const startDate = data.period.start instanceof Date ? data.period.start : new Date(data.period.start)
+      const endDate = data.period.end instanceof Date ? data.period.end : new Date(data.period.end)
+      
       return `Create a quarterly summary for engineer ${data.member.firstName} ${data.member.lastName}
-      for the period ${data.period.start.toISOString()} to ${data.period.end.toISOString()}.
+      for the period ${startDate.toISOString()} to ${endDate.toISOString()}.
       
       Time Entries: ${data.entries.length}
       Tickets Worked: ${data.tickets.length}
@@ -71,9 +75,13 @@ const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
     systemPrompt: `You are an expert at reviewing MSP engineer performance against industry standards.
     Evaluate time tracking, notes quality, billability, and productivity.
     Provide scores (0-100) and detailed recommendations.`,
-    userPrompt: (data: { member: any; entries: any[]; tickets: any[]; period: { start: Date; end: Date } }) => {
+    userPrompt: (data: { member: any; entries: any[]; tickets: any[]; period: { start: Date | string; end: Date | string } }) => {
+      // Handle both Date objects and ISO strings (from JSON serialization)
+      const startDate = data.period.start instanceof Date ? data.period.start : new Date(data.period.start)
+      const endDate = data.period.end instanceof Date ? data.period.end : new Date(data.period.end)
+      
       return `Review engineer ${data.member.firstName} ${data.member.lastName} against MSP standards
-      for the period ${data.period.start.toISOString()} to ${data.period.end.toISOString()}.
+      for the period ${startDate.toISOString()} to ${endDate.toISOString()}.
       
       Provide scores and recommendations for:
       1. Time Tracking Quality

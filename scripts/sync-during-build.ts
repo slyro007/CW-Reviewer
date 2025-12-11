@@ -10,9 +10,9 @@
 
 import { PrismaClient } from '@prisma/client'
 import ConnectWiseClient from '../api/connectwise.js'
-import { 
-  ALLOWED_ENGINEER_IDENTIFIERS, 
-  SERVICE_BOARD_NAMES, 
+import {
+  ALLOWED_ENGINEER_IDENTIFIERS,
+  SERVICE_BOARD_NAMES,
   SYNC_STALE_THRESHOLD_MS,
   SYNC_INCREMENTAL_FALLBACK
 } from '../api/config.js'
@@ -34,7 +34,7 @@ function log(message: string, data?: any) {
 
 async function performBuildSync() {
   log('🚀 Starting build-time data sync...')
-  
+
   try {
     // Initialize ConnectWise client
     const client = new ConnectWiseClient({
@@ -50,22 +50,35 @@ async function performBuildSync() {
     const results: SyncResult[] = []
     const now = new Date()
     const entitiesToSync = ['members', 'boards', 'tickets', 'timeEntries', 'projects', 'projectTickets']
-    
+
     // Check existing sync logs
     const syncLogs = await prisma.syncLog.findMany()
     log(`📊 Found ${syncLogs.length} existing sync logs`)
-    
+
     let allowedMemberIds: number[] = []
-    
+
     for (const entityType of entitiesToSync) {
       const syncLogEntry = syncLogs.find(l => l.entityType === entityType)
       const lastSyncAt = syncLogEntry?.lastSyncAt || null
       const isStale = !lastSyncAt || (now.getTime() - lastSyncAt.getTime() > SYNC_STALE_THRESHOLD_MS)
-      
+
+      // SAFETY CHECK: Enforce minimum sync interval to prevent excessive database calls
+      if (lastSyncAt) {
+        const timeSinceLastSync = now.getTime() - lastSyncAt.getTime()
+        const { MINIMUM_SYNC_INTERVAL_MS } = await import('../api/config.js')
+
+        if (timeSinceLastSync < MINIMUM_SYNC_INTERVAL_MS) {
+          const hoursRemaining = ((MINIMUM_SYNC_INTERVAL_MS - timeSinceLastSync) / (1000 * 60 * 60)).toFixed(1)
+          log(`⏸️  Skipping ${entityType} - synced ${(timeSinceLastSync / (1000 * 60 * 60)).toFixed(1)}h ago. Minimum interval: 6h. Try again in ${hoursRemaining}h.`)
+          results.push({ entity: entityType, synced: false, count: 0, message: `Skipped - minimum interval not met (${hoursRemaining}h remaining)` })
+          continue
+        }
+      }
+
       // Determine sync mode
       const isIncrementalSync = Boolean(lastSyncAt && !['members', 'boards'].includes(entityType))
       const syncMode = isIncrementalSync ? 'incremental' : 'full'
-      
+
       log(`\n📦 Syncing ${entityType} (${syncMode})...`)
       if (isIncrementalSync && lastSyncAt) {
         log(`   Last sync: ${lastSyncAt.toISOString()}`)
@@ -190,7 +203,7 @@ async function performBuildSync() {
 
     const totalSynced = results.filter(r => r.synced).length
     const totalFailed = results.filter(r => !r.synced).length
-    
+
     log(`\n🎉 Build sync completed!`)
     log(`   Successfully synced: ${totalSynced}/${results.length} entities`)
     if (totalFailed > 0) {
@@ -209,10 +222,10 @@ async function performBuildSync() {
 // Import sync functions from sync.ts (we'll need to extract them)
 async function syncMembers(client: any): Promise<{ count: number; memberIds: number[] }> {
   const allMembers = await client.getMembers()
-  const allowedMembers = allMembers.filter((m: any) => 
+  const allowedMembers = allMembers.filter((m: any) =>
     ALLOWED_ENGINEER_IDENTIFIERS.includes(m.identifier?.toLowerCase())
   )
-  
+
   const memberIds: number[] = []
   for (const member of allowedMembers) {
     memberIds.push(member.id)
@@ -247,7 +260,7 @@ async function syncBoards(client: any): Promise<number> {
       create: { id: board.id, name: board.name, type },
       update: { name: board.name, type }
     })
-    if (SERVICE_BOARD_NAMES.some(name => 
+    if (SERVICE_BOARD_NAMES.some(name =>
       board.name?.toLowerCase().includes(name.toLowerCase().replace('(ms)', '').replace('(ts)', '').trim()) ||
       name.toLowerCase().includes(board.name?.toLowerCase())
     )) {
@@ -266,17 +279,24 @@ async function syncTickets(client: any, allowedMemberIds: number[], modifiedSinc
   const allowedMembers = await prisma.member.findMany({ where: { id: { in: allowedMemberIds } } })
   const allowedIdentifiers = allowedMembers.map(m => m.identifier.toLowerCase())
   const serviceBoardIds = boards
-    .filter((b: any) => SERVICE_BOARD_NAMES.some(name => 
+    .filter((b: any) => SERVICE_BOARD_NAMES.some(name =>
       b.name?.toLowerCase().includes(name.toLowerCase().replace('(ms)', '').replace('(ts)', '').trim()) ||
       name.toLowerCase().includes(b.name?.toLowerCase())
     ))
     .map((b: any) => b.id)
-  const allTickets = await client.getTickets(serviceBoardIds, undefined, undefined, {}, modifiedSince)
+  const allTickets = await client.getTickets(
+    serviceBoardIds,
+    undefined,
+    undefined,
+    allowedIdentifiers, // Pass member identifiers for server-side filtering
+    {},
+    modifiedSince
+  )
   const relevantTickets = allTickets.filter((t: any) => {
     const owner = t.owner?.identifier?.toLowerCase() || t.owner?.toLowerCase() || ''
     const resources = t.teamMember?.toLowerCase() || t.resources?.toLowerCase() || ''
     return allowedIdentifiers.includes(owner) ||
-           allowedIdentifiers.some(id => resources.includes(id))
+      allowedIdentifiers.some(id => resources.includes(id))
   })
   for (const ticket of relevantTickets) {
     const boardId = ticket.board?.id || ticket.boardId
@@ -340,7 +360,7 @@ async function syncTimeEntries(client: any, allowedMemberIds: number[], modified
         }
         await prisma.ticket.create({
           data: { id: ticketId, boardId: 1, summary: 'Placeholder - synced via time entry' }
-        }).catch(() => {})
+        }).catch(() => { })
       }
     }
     await prisma.timeEntry.upsert({
