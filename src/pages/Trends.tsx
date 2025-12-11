@@ -120,9 +120,17 @@ export default function Trends() {
           .filter(e => e.projectId !== null && e.projectId !== undefined)
           .map(e => e.projectId!)
       )
+      // Get projects where any team member is a resource
+      const teamResourceProjectIds = new Set(
+        projectTickets
+          .filter(t => t.resources && teamIdentifiers.some(id => t.resources?.toLowerCase().includes(id.toLowerCase())))
+          .map(t => t.projectId)
+      )
+
       return projects.filter(p =>
         (p.managerIdentifier && teamIdentifiers.includes(p.managerIdentifier.toLowerCase())) ||
-        timeEntryProjectIds.has(p.id)
+        timeEntryProjectIds.has(p.id) ||
+        teamResourceProjectIds.has(p.id)
       )
     }
     return projects

@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react'
-import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
+import { useSelectedEngineerStore, TEAM_DEFINITIONS } from '@/stores/selectedEngineerStore'
 import { useMembersStore } from '@/stores/membersStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
 import { useTicketsStore } from '@/stores/ticketsStore'
@@ -26,7 +26,7 @@ interface AIAnalysisResult {
 }
 
 export default function PerformanceReview() {
-  const { selectedEngineerId } = useSelectedEngineerStore()
+  const { selectedEngineerId, selectedTeam } = useSelectedEngineerStore()
   const { members } = useMembersStore()
   const { entries, fetchTimeEntries } = useTimeEntriesStore()
   const { tickets, fetchTickets } = useTicketsStore()
@@ -60,10 +60,16 @@ export default function PerformanceReview() {
 
     if (selectedEngineerId !== null) {
       result = result.filter(e => e.memberId === selectedEngineerId)
+    } else if (selectedTeam !== 'All Company') {
+      const teamIdentifiers = TEAM_DEFINITIONS[selectedTeam] || []
+      result = result.filter(e => {
+        const member = members.find(m => m.id === e.memberId)
+        return member && teamIdentifiers.includes(member.identifier.toLowerCase())
+      })
     }
 
     return result
-  }, [entries, selectedEngineerId, dateRange])
+  }, [entries, selectedEngineerId, selectedTeam, dateRange, members])
 
 
   // Generate AI Review

@@ -108,9 +108,17 @@ export default function Dashboard() {
       // Team Filter
       if (selectedTeam !== 'All Company') {
         const teamMembers = TEAM_DEFINITIONS[selectedTeam] || []
+
+        // Check if any team member logged time on this ticket
+        const hasTeamEntry = entries.some(e =>
+          e.ticketId === t.id &&
+          teamMembers.includes(members.find(m => m.id === e.memberId)?.identifier || '')
+        )
+
         const isOwnerInTeam = teamMembers.some(id => id.toLowerCase() === t.owner?.toLowerCase())
         const isResourceInTeam = t.resources && teamMembers.some(id => t.resources?.toLowerCase().includes(id.toLowerCase()))
-        if (!isOwnerInTeam && !isResourceInTeam) return false
+
+        if (!isOwnerInTeam && !isResourceInTeam && !hasTeamEntry) return false
       }
 
       // Engineer Filter
@@ -141,7 +149,23 @@ export default function Dashboard() {
       // Team Filter
       if (selectedTeam !== 'All Company') {
         const teamMembers = TEAM_DEFINITIONS[selectedTeam] || []
-        if (p.managerIdentifier && !teamMembers.includes(p.managerIdentifier.toLowerCase())) return false
+
+        const isManagerInTeam = p.managerIdentifier && teamMembers.includes(p.managerIdentifier.toLowerCase())
+
+        // Check time entries
+        const hasTeamEntry = entries.some(e =>
+          e.projectId === p.id &&
+          teamMembers.includes(members.find(m => m.id === e.memberId)?.identifier || '')
+        )
+
+        // Check tickets
+        const hasTeamTicket = projectTickets.some(t =>
+          t.projectId === p.id &&
+          t.resources &&
+          teamMembers.some(id => t.resources?.toLowerCase().includes(id.toLowerCase()))
+        )
+
+        if (!isManagerInTeam && !hasTeamEntry && !hasTeamTicket) return false
       }
 
       // Engineer Filter (Manager)

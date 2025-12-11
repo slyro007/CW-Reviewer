@@ -90,12 +90,18 @@ export default function Highlights() {
       result = result.filter(t => ticketIds.has(t.id))
     } else if (selectedTeam !== 'All Company') {
       const teamIdentifiers = TEAM_DEFINITIONS[selectedTeam] || []
+
+      // Get tickets where any team member has logged time
+      const teamTimeTicketIds = new Set(
+        filteredEntries
+          .filter(e => e.ticketId)
+          .map(e => e.ticketId!)
+      )
+
       result = result.filter(t => {
         const isOwnerInTeam = teamIdentifiers.some((id: string) => id.toLowerCase() === t.owner?.toLowerCase())
         const isResourceInTeam = t.resources && teamIdentifiers.some((id: string) => t.resources?.toLowerCase().includes(id.toLowerCase()))
-        // Also include if in filteredEntries (which are team filtered)
-        const hasEntry = filteredEntries.some(e => e.ticketId === t.id)
-        return isOwnerInTeam || isResourceInTeam || hasEntry
+        return isOwnerInTeam || isResourceInTeam || teamTimeTicketIds.has(t.id)
       })
     }
     return result
@@ -118,19 +124,29 @@ export default function Highlights() {
       )
     } else if (selectedTeam !== 'All Company') {
       const teamIdentifiers = TEAM_DEFINITIONS[selectedTeam] || []
-      // Get project IDs from time entries (team filtered)
-      const timeEntryProjectIds = new Set(
+
+      // Get projects where any team member has logged time
+      const teamTimeProjectIds = new Set(
         filteredEntries
           .filter(e => e.projectId !== null && e.projectId !== undefined)
           .map(e => e.projectId!)
       )
+
+      // Get projects where any team member is a resource
+      const teamResourceProjectIds = new Set(
+        projectTickets
+          .filter(t => t.resources && teamIdentifiers.some(id => t.resources?.toLowerCase().includes(id.toLowerCase())))
+          .map(t => t.projectId)
+      )
+
       return projects.filter(p =>
         (p.managerIdentifier && teamIdentifiers.includes(p.managerIdentifier.toLowerCase())) ||
-        timeEntryProjectIds.has(p.id)
+        teamTimeProjectIds.has(p.id) ||
+        teamResourceProjectIds.has(p.id)
       )
     }
     return projects
-  }, [projects, selectedEngineer, selectedTeam, includesProjects, filteredEntries])
+  }, [projects, selectedEngineer, selectedTeam, includesProjects, filteredEntries, projectTickets])
 
   const filteredProjectTickets = useMemo(() => {
     if (!includesProjects) return []

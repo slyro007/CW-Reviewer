@@ -109,8 +109,29 @@ export default function Projects() {
       )
     } else if (selectedTeam !== 'All Company') {
       const teamIdentifiers = TEAM_DEFINITIONS[selectedTeam] || []
+
+      // Get projects where any team member has logged time
+      const teamTimeProjectIds = new Set(
+        entries
+          .filter(e => {
+            // Find member for this entry
+            const entryMember = members.find(m => m.id === e.memberId)
+            return entryMember && teamIdentifiers.includes(entryMember.identifier) && e.projectId
+          })
+          .map(e => e.projectId!)
+      )
+
+      // Get projects where any team member is a resource
+      const teamResourceProjectIds = new Set(
+        projectTickets
+          .filter(t => t.resources && teamIdentifiers.some(id => t.resources?.toLowerCase().includes(id.toLowerCase())))
+          .map(t => t.projectId)
+      )
+
       result = result.filter(p =>
-        p.managerIdentifier && teamIdentifiers.includes(p.managerIdentifier.toLowerCase())
+        (p.managerIdentifier && teamIdentifiers.includes(p.managerIdentifier.toLowerCase())) ||
+        teamTimeProjectIds.has(p.id) ||
+        teamResourceProjectIds.has(p.id)
       )
     }
 

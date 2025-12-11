@@ -119,10 +119,21 @@ export default function ServiceTickets() {
       result = result.filter(t => engineerTicketIds.has(t.id))
     } else if (selectedTeam !== 'All Company') {
       const teamIdentifiers = TEAM_DEFINITIONS[selectedTeam] || []
+
+      // Get tickets where any team member has logged time
+      const teamTimeTicketIds = new Set(
+        entries
+          .filter(e => {
+            const entryMember = members.find(m => m.id === e.memberId)
+            return entryMember && teamIdentifiers.includes(entryMember.identifier) && e.ticketId
+          })
+          .map(e => e.ticketId!)
+      )
+
       result = result.filter(t => {
         const isOwnerInTeam = teamIdentifiers.some((id: string) => id.toLowerCase() === t.owner?.toLowerCase())
         const isResourceInTeam = t.resources && teamIdentifiers.some((id: string) => t.resources?.toLowerCase().includes(id.toLowerCase()))
-        return isOwnerInTeam || isResourceInTeam
+        return isOwnerInTeam || isResourceInTeam || teamTimeTicketIds.has(t.id)
       })
     }
 
