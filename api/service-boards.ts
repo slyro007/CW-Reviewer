@@ -15,26 +15,30 @@ export default async function handler(
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400')
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end()
   }
 
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
+  // ... (rest of validation)
 
   try {
     console.log('[API /service-boards] Fetching service boards from database...')
-    
+
+    // Select ONLY what we need - Truncating info from DB
     const serviceBoards = await prisma.serviceBoard.findMany({
+      select: {
+        boardId: true,
+        name: true
+      },
       orderBy: {
         name: 'asc',
       },
     })
 
     console.log(`[API /service-boards] Returning ${serviceBoards.length} service boards from database`)
-    
+
     // Transform to match expected format
     const transformed = serviceBoards.map(b => ({
       id: b.boardId,

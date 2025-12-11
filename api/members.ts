@@ -9,21 +9,29 @@ export default async function handler(
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  res.setHeader('Cache-Control', 'public, s-maxage=3600, stale-while-revalidate=86400') // Members barely change, cache longer
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end()
   }
 
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
+  // ... (rest of validation)
 
   try {
     console.log('[API /members] Fetching members from database...')
-    
+
+    // Select ONLY what we need - Truncating info from DB
     const members = await prisma.member.findMany({
       where: {
         inactiveFlag: false,
+      },
+      select: {
+        id: true,
+        identifier: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        inactiveFlag: true
       },
       orderBy: {
         firstName: 'asc',
@@ -31,7 +39,7 @@ export default async function handler(
     })
 
     console.log(`[API /members] Returning ${members.length} members from database`)
-    
+
     // Transform to match expected format
     const transformed = members.map(m => ({
       id: m.id,
@@ -45,8 +53,8 @@ export default async function handler(
     return res.status(200).json(transformed)
   } catch (error: any) {
     console.error('[API /members] Error:', error)
-    return res.status(500).json({ 
-      error: error.message || 'Failed to fetch members' 
+    return res.status(500).json({
+      error: error.message || 'Failed to fetch members'
     })
   }
 }

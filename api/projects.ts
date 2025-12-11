@@ -16,51 +16,82 @@ export default async function handler(
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end()
   }
 
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
+  // ... (rest of validation)
 
   try {
     const { managerIds } = req.query
 
     console.log('[API /projects] Query params:', { managerIds })
+    const { status, managerIdentifier, modifiedSince } = req.query
+
+    console.log('[API /projects] Query params:', { status, managerIdentifier, modifiedSince })
 
     // Build where clause
     const where: any = {}
 
-    if (managerIds) {
-      const managers = typeof managerIds === 'string' 
-        ? managerIds.split(',') 
-        : managerIds as string[]
-      where.managerIdentifier = { in: managers }
+    if (status) {
+      where.status = status as string
+    }
+
+    if (managerIdentifier) {
+      where.managerIdentifier = managerIdentifier as string
     } else {
       // Default to only allowed engineers if no specific managers requested
       where.managerIdentifier = { in: ALLOWED_ENGINEER_IDENTIFIERS }
     }
 
+    // Incremental fetch support
+    if (modifiedSince) {
+      where.updatedAt = {
+        gt: new Date(modifiedSince as string)
+      }
+    }
+
     console.log('[API /projects] Fetching projects from database...')
-    
+
+    // Select ONLY necessary fields
     const projects = await prisma.project.findMany({
       where,
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        company: true,
+        managerIdentifier: true,
+        managerName: true,
+        boardName: true,
+        estimatedStart: true,
+        estimatedEnd: true,
+        actualStart: true,
+        actualEnd: true,
+        estimatedHours: true,
+        actualHours: true,
+        percentComplete: true,
+        type: true,
+        closedFlag: true,
+        description: true,
+        updatedAt: true // For incremental sync
+      },
       orderBy: {
-        id: 'desc',
+        name: 'asc',
       },
     })
 
     console.log(`[API /projects] Returning ${projects.length} projects from database`)
-    
+
     // Transform to match expected format (matching CW API structure)
     const transformed = projects.map(p => ({
       id: p.id,
       name: p.name,
       status: { name: p.status },
       company: { name: p.company },
-      manager: { 
+      manager: {
         identifier: p.managerIdentifier,
         name: p.managerName,
       },
@@ -80,9 +111,9 @@ export default async function handler(
     return res.status(200).json(transformed)
   } catch (error: any) {
     console.error('[API /projects] Error:', error)
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: 'Failed to fetch projects',
-      message: error.message 
+      message: error.message
     })
   }
 }

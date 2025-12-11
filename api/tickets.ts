@@ -18,9 +18,9 @@ export default async function handler(
   // ... (rest of validation)
 
   try {
-    const { boardIds, startDate, endDate } = req.query
+    const { boardIds, startDate, endDate, modifiedSince } = req.query
 
-    console.log('[API /tickets] Query params:', { boardIds, startDate, endDate })
+    console.log('[API /tickets] Query params:', { boardIds, startDate, endDate, modifiedSince })
 
     // Build where clause
     const where: any = {}
@@ -37,6 +37,13 @@ export default async function handler(
       }
       if (endDate) {
         where.dateEntered.lte = new Date(endDate as string)
+      }
+    }
+
+    // Incremental fetch support
+    if (modifiedSince) {
+      where.updatedAt = {
+        gt: new Date(modifiedSince as string)
       }
     }
 
@@ -61,6 +68,7 @@ export default async function handler(
         resources: true, // teamMember maps to this
         estimatedHours: true,
         actualHours: true,
+        updatedAt: true, // Needed for client-side incremental merging
         board: {
           select: {
             id: true,

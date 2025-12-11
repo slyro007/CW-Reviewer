@@ -1,11 +1,198 @@
+import { useEffect, useMemo, useState } from 'react'
 import TeamFilter from '@/components/TeamFilter'
-import { format } from 'date-fns'
+import DataSourceFilter from '@/components/DataSourceFilter'
+import { useMembersStore } from '@/stores/membersStore'
+import { useTicketsStore } from '@/stores/ticketsStore'
+import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
+import { useProjectsStore } from '@/stores/projectsStore'
+import { useTimePeriodStore } from '@/stores/timePeriodStore'
+import { useSelectedEngineerStore } from '@/stores/selectedEngineerStore'
 
 export default function Dashboard() {
   const { members, isLoading: membersLoading, fetchMembers } = useMembersStore()
-  // ... (existing hooks)
 
-  // ... (existing logic)
+  const {
+    entries,
+    isLoading: entriesLoading,
+    fetchTimeEntries,
+    syncTimeEntries
+  } = useTimeEntriesStore()
+
+  const {
+    tickets, // These are Project Board tickets usually
+    serviceTickets,
+    isLoading: ticketsLoading,
+    isLoadingService,
+    fetchTickets, // Fetches project board tickets (legacy naming?) or ALL? Default fetchTickets fetches ALL if no params.
+    fetchServiceBoardTickets,
+    syncTickets,
+    syncServiceTickets,
+    getTicketStats
+  } = useTicketsStore()
+
+  const {
+    projects,
+    projectTickets,
+    isLoading: projectsLoading,
+    fetchProjects,
+    fetchProjectTickets,
+    syncProjects,
+    syncProjectTickets,
+    getProjectStats
+  } = useProjectsStore()
+
+  const { getDateRange, getPeriodLabel } = useTimePeriodStore()
+  const { selectedEngineerId } = useSelectedEngineerStore()
+
+  // Local state for toggles
+  const [dataSources, setDataSources] = useState<('service' | 'projects')[]>(['service', 'projects'])
+  const includesServiceDesk = dataSources.includes('service')
+  const includesProjects = dataSources.includes('projects')
+
+  // Load Initial Data (Once)
+  useEffect(() => {
+    const loadAllData = async () => {
+      // Parallel fetch for speed
+      await Promise.all([
+        fetchMembers(),
+        fetchTimeEntries(), // Fetch ALL time entries (5 years)
+        fetchServiceBoardTickets(),
+        fetchProjects(),
+        fetchProjectTickets() // Fetch ALL project tickets
+      ])
+    }
+
+    loadAllData()
+
+    // Setup 15-minute polling
+    const intervalId = setInterval(() => {
+      console.log('[Dashboard] Polling for updates...')
+      syncTimeEntries()
+      syncServiceTickets()
+      syncProjects()
+      syncProjectTickets()
+    }, 15 * 60 * 1000)
+
+    return () => clearInterval(intervalId)
+  }, []) // Empty dependency array = persistent data, no re-fetching on filter change
+
+  // Filtering Logic
+  const dateRange = getDateRange() // { start, end }
+
+  // Filter Time Entries (by Date & Engineer)
+  const filteredEntries = useMemo(() => {
+    if (!dateRange.start || !dateRange.end) return []
+
+    return entries.filter(e => {
+      // 1. Date Filter
+      const d = new Date(e.dateStart)
+      const inDateRange = d >= dateRange.start! && d <= dateRange.end!
+      if (!inDateRange) return false
+
+      // 2. Engineer Filter
+      if (selectedEngineerId && e.memberId !== selectedEngineerId) return false
+
+      return true
+    }).sort((a, b) => new Date(b.dateStart).getTime() - new Date(a.dateStart).getTime())
+  }, [entries, dateRange, selectedEngineerId])
+
+  // Filter Service Tickets (by Date? Usually tickets are filtering by "Closed Date" or "Entered Date" if strictly in period)
+  // For "Service Tickets" widget, usually we show active OR closed in period.
+  // We'll filter by: Active OR (Closed in DateRange)
+  const filteredServiceTickets = useMemo(() => {
+    if (!dateRange.start || !dateRange.end) return serviceTickets
+
+    return serviceTickets.filter(t => {
+      // Engineer Filter
+      // (Ticket resource matching is complex string matching, simplified here or ignored if TeamFilter logic is mainly for Time Entries)
+      // Usually Dashboard filters tickets by Owner/Resource if engineer selected.
+      if (selectedEngineerId) {
+        const member = members.find(m => m.id === selectedEngineerId)
+        if (member) {
+          // Check owner or resources
+          const isOwner = t.owner === member.identifier
+          const isResource = t.resources?.includes(member.identifier)
+          if (!isOwner && !isResource) return false
+        }
+      }
+
+      // Date Filter
+      // If Open: Include? (Usually yes, "Open Tickets" are irrelevant of date entered, they are current backlog)
+      // If Closed: Include only if closed in range?
+      if (t.closedFlag) {
+        if (!t.closedDate) return false
+        const closedAt = new Date(t.closedDate)
+        return closedAt >= dateRange.start! && closedAt <= dateRange.end!
+      }
+
+      // If Open, show it (as it's current work)
+      // OR do we restrict "Open" to "Entered in range"?
+      // Typically "Overview" shows "Current Open" + "Closed Recently".
+      // Let's assume inclusive.
+      return true
+    })
+  }, [serviceTickets, dateRange, selectedEngineerId, members])
+
+  // Filter Projects (Active OR Closed in Range)
+  const filteredProjects = useMemo(() => {
+    if (!dateRange.start || !dateRange.end) return projects
+
+    return projects.filter(p => {
+      // Engineer Filter (Manager)
+      if (selectedEngineerId) {
+        const member = members.find(m => m.id === selectedEngineerId)
+        if (member && p.managerIdentifier?.toLowerCase() !== member.identifier.toLowerCase()) {
+          return false
+        }
+      }
+
+      // Date Filter
+      if (p.closedFlag) {
+        // Projects often don't have closedDate in some models, check actualEnd?
+        // Or just show all if not too many?
+        // The logic: If closed, must be relevant to period.
+        // If we don't have closedDate, we might skip or show.
+        // Let's keep logic simple: Show all for now, as projects are long running.
+        // Or filter by "Active" mainly.
+      }
+      return true
+    })
+  }, [projects, selectedEngineerId, members, dateRange])
+
+
+  // Calculate Stats
+  const ticketStats = useMemo(() => getTicketStats(filteredServiceTickets), [filteredServiceTickets]) // Use helper from store (need to export it or logic here)
+  // Store has `getTicketStats`, but need to import/destructure it. Added to destructure above.
+
+  const projectStats = useMemo(() => getProjectStats(filteredProjects), [filteredProjects])
+
+  // Aggregate Member Stats
+  const membersWithHours = useMemo(() => {
+    return members.map(m => {
+      // Only sum hours from *filtered* entries (which are already date-filtered)
+      // But we must NOT filter filteredEntries by memberId *again* if it was already filtered by selectedEngineerId logic?
+      // Wait, if selectedEngineerId is set, filteredEntries only contains that engineer.
+      // So other members will have 0 hours. This is correct behavior for "Engineers Overview" (others disappear or show 0).
+      // Actually, if selectedEngineerId is set, filteredMembers usually only shows that one.
+
+      const memberEntries = filteredEntries.filter(e => e.memberId === m.id)
+      const total = memberEntries.reduce((sum, e) => sum + e.hours, 0)
+      return { ...m, totalHours: total }
+    })
+      .filter(m => {
+        // Visibility logic
+        if (selectedEngineerId && m.id !== selectedEngineerId) return false
+        if (m.totalHours === 0 && !selectedEngineerId) return false // Hide 0 hours if showing all? Or show all?
+        // Usually show keys
+        return m.totalHours > 0 || (selectedEngineerId ? m.id === selectedEngineerId : false)
+      })
+      .sort((a, b) => b.totalHours - a.totalHours)
+  }, [members, filteredEntries, selectedEngineerId])
+
+  const filteredMembers = membersWithHours // Alias for JSX usage
+
+  const totalHours = useMemo(() => filteredEntries.reduce((sum, e) => sum + e.hours, 0), [filteredEntries])
+  const billableHours = useMemo(() => filteredEntries.reduce((sum, e) => e.billableOption === 'Billable' ? sum + e.hours : sum, 0), [filteredEntries])
 
   return (
     <div className="px-4 py-6 sm:px-0">

@@ -10,7 +10,7 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
   try {
     const url = `${API_BASE}${endpoint}`
     console.log(`[API] Fetching: ${url}`)
-    
+
     const response = await fetch(url, {
       ...options,
       headers: {
@@ -24,7 +24,7 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
     if (!response.ok) {
       // Try to get error details from response body
       let errorMessage = `API error: ${response.status} ${response.statusText || 'Unknown error'}`
-      
+
       try {
         const errorBody = await response.text()
         if (errorBody) {
@@ -39,14 +39,14 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
       } catch (parseError) {
         console.error('[API] Failed to parse error response:', parseError)
       }
-      
+
       console.error(`[API] Error details:`, {
         url,
         status: response.status,
         statusText: response.statusText,
         errorMessage,
       })
-      
+
       throw new Error(errorMessage)
     }
 
@@ -63,7 +63,7 @@ async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> 
     if (error.message && error.message.startsWith('API error:')) {
       throw error
     }
-    
+
     // Otherwise, wrap network/other errors
     console.error('[API] Fetch error:', error)
     throw new Error(`Network error: ${error.message || 'Failed to fetch'}`)
@@ -79,12 +79,16 @@ export const api = {
     startDate?: string
     endDate?: string
     memberIds?: number[]
+    projectId?: number
+    modifiedSince?: string
   }) => {
     const queryParams = new URLSearchParams()
     if (params?.startDate) queryParams.append('startDate', params.startDate)
     if (params?.endDate) queryParams.append('endDate', params.endDate)
     if (params?.memberIds) queryParams.append('memberIds', params.memberIds.join(','))
-    
+    if (params?.projectId) queryParams.append('projectId', params.projectId.toString())
+    if (params?.modifiedSince) queryParams.append('modifiedSince', params.modifiedSince)
+
     const query = queryParams.toString()
     return fetchAPI<any[]>(`/time-entries${query ? `?${query}` : ''}`)
   },
@@ -94,12 +98,14 @@ export const api = {
     boardIds?: number[]
     startDate?: string
     endDate?: string
+    modifiedSince?: string
   }) => {
     const queryParams = new URLSearchParams()
     if (params?.boardIds) queryParams.append('boardIds', params.boardIds.join(','))
     if (params?.startDate) queryParams.append('startDate', params.startDate)
     if (params?.endDate) queryParams.append('endDate', params.endDate)
-    
+    if (params?.modifiedSince) queryParams.append('modifiedSince', params.modifiedSince)
+
     const query = queryParams.toString()
     return fetchAPI<any[]>(`/tickets${query ? `?${query}` : ''}`)
   },
@@ -115,11 +121,15 @@ export const api = {
 
   // Projects (ConnectWise Project Management)
   getProjects: (params?: {
-    managerIds?: string[]
+    managerIdentifier?: string
+    status?: string
+    modifiedSince?: string
   }) => {
     const queryParams = new URLSearchParams()
-    if (params?.managerIds) queryParams.append('managerIds', params.managerIds.join(','))
-    
+    if (params?.managerIdentifier) queryParams.append('managerIdentifier', params.managerIdentifier)
+    if (params?.status) queryParams.append('status', params.status)
+    if (params?.modifiedSince) queryParams.append('modifiedSince', params.modifiedSince)
+
     const query = queryParams.toString()
     return fetchAPI<any[]>(`/projects${query ? `?${query}` : ''}`)
   },
@@ -127,10 +137,12 @@ export const api = {
   // Project Tickets (tickets that belong to projects, different from service tickets)
   getProjectTickets: (params?: {
     projectId?: number
+    modifiedSince?: string
   }) => {
     const queryParams = new URLSearchParams()
     if (params?.projectId) queryParams.append('projectId', params.projectId.toString())
-    
+    if (params?.modifiedSince) queryParams.append('modifiedSince', params.modifiedSince)
+
     const query = queryParams.toString()
     return fetchAPI<any[]>(`/project-tickets${query ? `?${query}` : ''}`)
   },
@@ -143,7 +155,7 @@ export const api = {
     }),
 
   // Sync
-  getSyncStatus: () => 
+  getSyncStatus: () =>
     fetchAPI<{
       isStale: boolean
       lastSync: string | null

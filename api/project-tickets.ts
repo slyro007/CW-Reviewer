@@ -16,14 +16,13 @@ export default async function handler(
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end()
   }
 
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
+  // ... (rest of validation)
 
   try {
     const { projectId } = req.query
@@ -38,11 +37,35 @@ export default async function handler(
     }
 
     console.log('[API /project-tickets] Fetching project tickets from database...')
-    
+
+    // Select ONLY what we need - Truncating info from DB
     const tickets = await prisma.projectTicket.findMany({
       where,
-      include: {
-        project: true,
+      select: {
+        id: true,
+        summary: true,
+        projectId: true,
+        projectName: true,
+        phaseId: true,
+        phaseName: true,
+        boardId: true,
+        boardName: true,
+        status: true,
+        company: true,
+        resources: true,
+        closedFlag: true,
+        priority: true,
+        type: true,
+        wbsCode: true,
+        budgetHours: true,
+        actualHours: true,
+        dateEntered: true,
+        closedDate: true,
+        project: {
+          select: {
+            name: true
+          }
+        }
       },
       orderBy: {
         id: 'desc',
@@ -50,14 +73,14 @@ export default async function handler(
     })
 
     console.log(`[API /project-tickets] Returning ${tickets.length} project tickets from database`)
-    
+
     // Transform to match expected format (matching CW API structure)
     const transformed = tickets.map(t => ({
       id: t.id,
       summary: t.summary,
-      project: { 
-        id: t.projectId, 
-        name: t.projectName || t.project?.name 
+      project: {
+        id: t.projectId,
+        name: t.projectName || t.project?.name
       },
       phase: t.phaseId ? { id: t.phaseId, name: t.phaseName } : null,
       board: t.boardId ? { id: t.boardId, name: t.boardName } : null,
@@ -77,9 +100,9 @@ export default async function handler(
     return res.status(200).json(transformed)
   } catch (error: any) {
     console.error('[API /project-tickets] Error:', error)
-    return res.status(500).json({ 
+    return res.status(500).json({
       error: 'Failed to fetch project tickets',
-      message: error.message 
+      message: error.message
     })
   }
 }

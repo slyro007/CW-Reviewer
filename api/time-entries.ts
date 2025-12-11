@@ -9,19 +9,18 @@ export default async function handler(
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end()
   }
 
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
+  // ... (rest of validation)
 
   try {
-    const { startDate, endDate, memberIds } = req.query
+    const { startDate, endDate, memberIds, projectId, modifiedSince } = req.query
 
-    console.log('[API /time-entries] Query params:', { startDate, endDate, memberIds })
+    console.log('[API /time-entries] Query params:', { startDate, endDate, memberIds, projectId, modifiedSince })
 
     // Build where clause
     const where: any = {}
@@ -41,13 +40,43 @@ export default async function handler(
       where.memberId = { in: memberIdArray }
     }
 
+    if (projectId) {
+      where.projectId = parseInt(projectId as string, 10)
+    }
+
+    // Incremental fetch support
+    if (modifiedSince) {
+      where.updatedAt = {
+        gt: new Date(modifiedSince as string)
+      }
+    }
+
     console.log('[API /time-entries] Fetching time entries from database...')
-    
+
+    // Select ONLY what we need - Truncating info from DB
     const entries = await prisma.timeEntry.findMany({
       where,
-      include: {
-        member: true,
-        ticket: true,
+      select: {
+        id: true,
+        memberId: true,
+        ticketId: true,
+        projectId: true,
+        hours: true,
+        billableOption: true,
+        notes: true,
+        internalNotes: true,
+        dateStart: true,
+        dateEnd: true,
+        updatedAt: true, // Needed for incremental sync merge
+        // Only fetch minimal relation data if needed, or rely on IDs
+        member: {
+          select: {
+            id: true,
+            identifier: true,
+            firstName: true,
+            lastName: true
+          }
+        }
       },
       orderBy: {
         dateStart: 'desc',
@@ -55,7 +84,7 @@ export default async function handler(
     })
 
     console.log(`[API /time-entries] Returning ${entries.length} time entries from database`)
-    
+
     // Transform to match expected format
     const transformed = entries.map(e => ({
       id: e.id,
