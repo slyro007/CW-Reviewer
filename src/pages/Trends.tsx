@@ -162,7 +162,7 @@ export default function Trends() {
       if (!projectIds.includes(t.projectId)) return false
 
       if (t.closedFlag) {
-        const closedAt = t.closedDate ? new Date(t.closedDate) : (t.resolvedDate ? new Date(t.resolvedDate) : null)
+        const closedAt = t.closedDate ? new Date(t.closedDate) : ((t as any).resolvedDate ? new Date((t as any).resolvedDate) : null)
         if (closedAt) {
           return closedAt >= dateRange.start && entered <= dateRange.end
         }
