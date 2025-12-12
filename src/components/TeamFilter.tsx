@@ -47,7 +47,7 @@ export default function TeamFilter() {
     }
 
     return (
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex flex-col gap-4">
             {/* Team Dropdown */}
             <div className="flex flex-col">
                 <label htmlFor="team-select" className="text-xs text-gray-500 mb-1 ml-1">Team</label>

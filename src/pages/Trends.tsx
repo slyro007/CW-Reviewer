@@ -157,15 +157,26 @@ export default function Trends() {
     })
   }, [projectTickets, filteredProjects, dateRange, includesProjects])
 
+  // Helper to get format string based on granularity
+  const formatStr = useMemo(() => {
+    switch (granularity) {
+      case 'day': return 'MMM d'
+      case 'week': return 'MMM d'
+      case 'month': return 'MMM yyyy'
+      default: return 'MMM d'
+    }
+  }, [granularity])
+
   // Generate chart data
   const chartData = useMemo(() => {
     let periods: Date[]
-    let formatStr: string
+    // reused formatStr via closure
+
     switch (granularity) {
-      case 'day': periods = eachDayOfInterval(dateRange); formatStr = 'MMM d'; break
-      case 'week': periods = eachWeekOfInterval(dateRange); formatStr = 'MMM d'; break
-      case 'month': periods = eachMonthOfInterval(dateRange); formatStr = 'MMM yyyy'; break
-      default: periods = eachDayOfInterval(dateRange); formatStr = 'MMM d'
+      case 'day': periods = eachDayOfInterval(dateRange); break
+      case 'week': periods = eachWeekOfInterval(dateRange); break
+      case 'month': periods = eachMonthOfInterval(dateRange); break
+      default: periods = eachDayOfInterval(dateRange)
     }
 
     return periods.map(period => {
@@ -179,7 +190,34 @@ export default function Trends() {
 
       const periodEntries = filteredEntries.filter(e => {
         const entryDate = new Date(e.dateStart)
-        return entryDate >= period && entryDate <= periodEnd
+        const inPeriod = entryDate >= period && entryDate <= periodEnd
+        if (!inPeriod) return false
+
+        // Filter by Data Source
+        // If entry has ticketId, it's Service (usually). If projectId, it's Project.
+        // Some entries might be purely internal (no ticket/project) - we tend to treat those as 'Service' or 'Other' depending on intent.
+        // For now, strict:
+        // if !includesServiceDesk, exclude if it HAS a ticketId OR is internal (no project)? 
+        // Let's assume:
+        // Project Work = has projectId
+        // Service Work = has ticketId (or no project and no ticket? - "General Admin")
+
+        // Actually, logic is simpler:
+        // if it matches a project, mapped to project.
+        // if it matches a ticket, mapped to service.
+
+        let isProject = !!e.projectId
+        let isService = !!e.ticketId
+        // Refined: Workstation projects behave like service? existing logic handles that in ticket counts, but for hours:
+        // If it's a workstation project, is it Project or Service hour?
+        // Usually Project hours unless explicitly re-mapped. Use standard 'projectId' check.
+
+        if (includesProjects && isProject) return true
+        if (includesServiceDesk && isService) return true
+        // If specific logic for "Internal/Standard" entries without IDs:
+        if (includesServiceDesk && !isProject && !isService) return true
+
+        return false
       })
 
       const totalHours = periodEntries.reduce((sum, e) => sum + e.hours, 0)
@@ -192,7 +230,13 @@ export default function Trends() {
       periodEntries.forEach(e => {
         const member = members.find(m => m.id === e.memberId)
         if (member) {
-          const name = member.firstName || member.identifier || 'Unknown'
+          let name = member.firstName || member.identifier || 'Unknown'
+          // specific overrides
+          if (member.identifier.toLowerCase() === 'dsolomon') name = 'Danny Solomon'
+          if (member.identifier.toLowerCase() === 'dcooper') name = 'Daniel Cooper'
+          // Use full name if plain "Daniel" to avoid collision if necessary, but the override handles the specific request
+          if (name === 'Daniel' && member.lastName) name = `Daniel ${member.lastName}`
+
           hoursByEngineer[name] = (hoursByEngineer[name] || 0) + e.hours
         }
       })
@@ -504,7 +548,16 @@ export default function Trends() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
                 <XAxis dataKey="date" stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 10 }} />
                 <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 12 }} />
-                <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#fff' }} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
+                  itemStyle={{ color: '#d1d5db' }}
+                  labelFormatter={(label) => format(new Date(label), formatStr)}
+                  formatter={(value: number, name: string) => [
+                    value.toFixed(1),
+                    name
+                  ]}
+                />
+                <Legend />
                 {engineerKeys.length > 0 ? (
                   engineerKeys.map((key, index) => (
                     <Area
@@ -524,25 +577,33 @@ export default function Trends() {
               </AreaChart>
             </ResponsiveContainer>
           </div>
-          <p className="text-xs text-gray-500 mt-2 text-center">Cumulative hours per engineer</p>
         </div>
 
-        {/* Resolution Time Trend */}
-        <div className="bg-gray-800 rounded-lg p-6">
+        <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
           <h3 className="text-lg font-semibold text-white mb-4">Avg Resolution Time</h3>
           <ChartExplanation
             title="Resolution Speed"
-            description="Tracks how long (in hours) it takes to close tickets. High spikes usually indicate old tickets being finally closed ('cleanup')."
+            description="Tracks the average time (Calendar Hours) from creation to closure for tickets closed in this period. Large spikes often indicate cleanup of old tickets."
             axisDetails={[{ label: "Y-Axis", description: "Avg. Hours to Close" }]}
           />
-          <div className="h-64">
+          <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-                <XAxis dataKey="date" stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 10 }} />
-                <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 12 }} />
-                <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#fff' }} formatter={(v: number) => [`${v}h`, 'Avg Time']} />
-                <Line type="monotone" dataKey="avgResolution" name="Avg Hours" stroke="#f59e0b" strokeWidth={2} dot={false} />
+                <XAxis
+                  dataKey="date"
+                  stroke="#9ca3af"
+                  tick={{ fill: '#9ca3af' }}
+                  tickMargin={10}
+                  minTickGap={30}
+                />
+                <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af' }} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
+                  itemStyle={{ color: '#d1d5db' }}
+                  labelFormatter={(label) => format(new Date(label), formatStr)}
+                  formatter={(value: number) => [`${value.toFixed(1)}h`, 'Avg Time']}
+                />      <Line type="monotone" dataKey="avgResolution" name="Avg Hours" stroke="#f59e0b" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
