@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import CWWrapped from './pages/CWWrapped'
+import AiAssessment from './pages/AiAssessment'
 import TimeTracking from './pages/TimeTracking'
 import Projects from './pages/Projects'
 import ServiceTickets from './pages/ServiceTickets'
@@ -28,6 +29,7 @@ function App() {
           <Route path="/performance-review" element={<PerformanceReview />} />
           <Route path="/export" element={<Export />} />
           <Route path="/wrapped" element={<CWWrapped />} />
+          <Route path="/ai-assessment" element={<AiAssessment />} />
         </Routes>
       </Layout>
     </BrowserRouter>

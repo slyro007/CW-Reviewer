@@ -16,6 +16,7 @@ export const ALLOWED_MEMBER_IDENTIFIERS = [
 
 interface MembersState {
   members: Member[]
+  allMembers: Member[] // Unfiltered list including past employees
   selectedMembers: number[] // For comparison feature
   isLoading: boolean
   error: string | null
@@ -31,6 +32,7 @@ interface MembersState {
 
 export const useMembersStore = create<MembersState>((set, get) => ({
   members: [],
+  allMembers: [],
   selectedMembers: [],
   isLoading: false,
   error: null,
@@ -52,11 +54,11 @@ export const useMembersStore = create<MembersState>((set, get) => ({
   fetchMembers: async () => {
     const { isLoading } = get()
     if (isLoading) return // Prevent duplicate fetches
-    
+
     set({ isLoading: true, error: null })
     try {
       const data = await api.getMembers()
-      
+
       // Transform API response to Member type
       const allMembers: Member[] = data.map((m: any) => ({
         id: m.id,
@@ -65,17 +67,19 @@ export const useMembersStore = create<MembersState>((set, get) => ({
         lastName: m.lastName || '',
         email: m.email || m.emailAddress || '',
         inactiveFlag: m.inactiveFlag || false,
+        isActive: m.isActive !== undefined ? m.isActive : !m.inactiveFlag,
+        startDate: m.startDate ? new Date(m.startDate) : undefined,
+        endDate: m.endDate ? new Date(m.endDate) : undefined,
       }))
-      
+
       // Filter to only include the allowed engineers (case-insensitive)
-      const members = allMembers.filter(m => 
+      const members = allMembers.filter(m =>
         ALLOWED_MEMBER_IDENTIFIERS.includes(m.identifier.toLowerCase())
       )
-      
-      console.log(`✅ Fetched ${allMembers.length} total members, filtered to ${members.length} allowed engineers:`)
-      members.forEach(m => console.log(`   - ${m.firstName} ${m.lastName} (${m.identifier})`))
-      
-      set({ members, isLoading: false })
+
+      console.log(`✅ Fetched ${allMembers.length} total members, filtered to ${members.length} allowed engineers`)
+
+      set({ members, allMembers, isLoading: false })
     } catch (error: any) {
       console.error('Error fetching members:', error)
       set({ error: error.message || 'Failed to fetch members', isLoading: false })

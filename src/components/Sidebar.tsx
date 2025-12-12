@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import TeamFilter from './TeamFilter'
 import TimePeriodSelector from './TimePeriodSelector'
+import EmployeeHistory from './EmployeeHistory'
 
 export default function Sidebar() {
   // Start open on desktop, closed on mobile
@@ -24,6 +25,7 @@ export default function Sidebar() {
     { path: '/compare', label: 'Compare' },
     { path: '/trends', label: 'Trends' },
     { path: '/highlights', label: 'Highlights' },
+    { path: '/ai-assessment', label: 'AI Assessment' },
     { path: '/performance-review', label: 'Performance Review' },
     { path: '/wrapped', label: 'CW Wrapped' },
     { path: '/export', label: 'Export' },
@@ -114,36 +116,40 @@ export default function Sidebar() {
             <TimePeriodSelector />
           </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 overflow-y-auto p-4">
-            <ul className="space-y-2">
-              {navItems.map((item) => {
-                const isActive = location.pathname === item.path
-                return (
-                  <li key={item.path}>
-                    <Link
-                      to={item.path}
-                      onClick={() => {
-                        // Close sidebar on mobile when navigating
-                        if (window.innerWidth < 1024) {
-                          setIsOpen(false)
-                        }
-                      }}
-                      className={`
-                        flex items-center px-4 py-3 rounded-lg transition-colors
-                        ${isActive
-                          ? 'bg-blue-600 text-white'
-                          : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                        }
-                      `}
-                    >
-                      <span className="font-medium">{item.label}</span>
-                    </Link>
-                  </li>
-                )
-              })}
-            </ul>
-          </nav>
+          {/* Navigation & History */}
+          <div className="flex-1 overflow-y-auto p-4 scroller">
+            <nav className="mb-8">
+              <ul className="space-y-2">
+                {navItems.map((item) => {
+                  const isActive = location.pathname === item.path
+                  return (
+                    <li key={item.path}>
+                      <Link
+                        to={item.path}
+                        onClick={() => {
+                          // Close sidebar on mobile when navigating
+                          if (window.innerWidth < 1024) {
+                            setIsOpen(false)
+                          }
+                        }}
+                        className={`
+                          flex items-center px-4 py-3 rounded-lg transition-colors
+                          ${isActive
+                            ? 'bg-blue-600 text-white'
+                            : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                          }
+                        `}
+                      >
+                        <span className="font-medium">{item.label}</span>
+                      </Link>
+                    </li>
+                  )
+                })}
+              </ul>
+            </nav>
+
+            <EmployeeHistory />
+          </div>
         </div>
       </aside>
     </>

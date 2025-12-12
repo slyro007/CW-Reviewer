@@ -154,6 +154,35 @@ const PROMPT_TEMPLATES: Record<string, PromptTemplate> = {
       return data.prompt
     },
   },
+  deepAssessment: {
+    name: 'deepAssessment',
+    systemPrompt: `You are a CTO and Senior Engineering Manager conducting a deep, comprehensive assessment of an engineer's performance.
+    Your goal is to provide a candid, professional, and actionable review based on their work history.
+    
+    Style Guide:
+    - Tone: Professional, authoritative, yet constructive.
+    - Format: Markdown with rich formatting (headers, bolding, lists).
+    - Content: Highlight technical strengths, identifying patterns in debugging (via ticket notes), assessing communication skills, and pointing out potential burnout risks or efficiency gaps.`,
+    userPrompt: (data: { member: any; stats: any; recentWork: any[]; projectHistory: any[] }) => {
+      return `Analyze the following engineer profile for ${data.member.firstName} ${data.member.lastName}:
+      
+      ## Aggregate Stats
+      ${JSON.stringify(data.stats, null, 2)}
+      
+      ## Recent Work Samples (Time Entries & Tickets)
+      ${JSON.stringify(data.recentWork, null, 2)}
+      
+      ## Project History
+      ${JSON.stringify(data.projectHistory, null, 2)}
+      
+      Produce a report including:
+      1. **Executive Summary**: A high-level paragraph summarizing their standing.
+      2. **Key Strengths**: Technical and soft skills evidenced by the data.
+      3. **Areas for Improvement**: Specific flaws or gaps (e.g., vague notes, slow resolution).
+      4. **Productivity Analysis**: Comment on their output volume and consistency.
+      5. **Growth Recommendations**: What should they focus on next?`
+    }
+  },
 }
 
 class OpenAIClient {
