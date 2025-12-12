@@ -186,40 +186,86 @@ export default function Trends() {
       const withNotes = periodEntries.filter(e => e.notes && e.notes.trim().length > 0).length
       const notesPercent = periodEntries.length > 0 ? (withNotes / periodEntries.length) * 100 : 0
 
-      // Service tickets
-      const periodServiceTickets = filteredServiceTickets.filter(t => {
+      // Calculate hours by engineer for this period
+      const hoursByEngineer: Record<string, number> = {}
+      periodEntries.forEach(e => {
+        const member = members.find(m => m.id === e.memberId)
+        if (member) {
+          const name = member.firstName || member.identifier || 'Unknown'
+          hoursByEngineer[name] = (hoursByEngineer[name] || 0) + e.hours
+        }
+      })
+
+      // Service tickets - CORRECTED LOGIC
+      // Opened: dateEntered is in period
+      const serviceOpened = filteredServiceTickets.filter(t => {
         if (!t.dateEntered) return false
         const entered = new Date(t.dateEntered)
         return entered >= period && entered <= periodEnd
-      })
-      const serviceOpened = periodServiceTickets.length
-      const serviceClosed = periodServiceTickets.filter(t => t.closedFlag).length
+      }).length
 
-      // Add Workstation Project Tickets to Service Stats
-      // Workstation projects are NOT in filteredProjects, but we need their tickets
-      // We can find them from projectTickets + isWorkstationProject(project)
+      // Closed: closedDate is in period
+      const serviceClosed = filteredServiceTickets.filter(t => {
+        if (!t.closedFlag || !t.closedDate) return false
+        const closed = new Date(t.closedDate)
+        return closed >= period && closed <= periodEnd
+      }).length
+
+      // Workstation Project Tickets (treated as Service)
       const workstationProjectIds = new Set(projects.filter(isWorkstationProject).map(p => p.id))
-      const periodWorkstationTickets = projectTickets.filter(t => {
-        if (!workstationProjectIds.has(t.projectId)) return false
+      const workstationTickets = projectTickets.filter(t => workstationProjectIds.has(t.projectId))
+
+      const workstationOpened = workstationTickets.filter(t => {
         if (!t.dateEntered) return false
         const entered = new Date(t.dateEntered)
         return entered >= period && entered <= periodEnd
-      })
+      }).length
 
-      const workstationOpened = periodWorkstationTickets.length
-      const workstationClosed = periodWorkstationTickets.filter(t => t.closedFlag).length
+      const workstationClosed = workstationTickets.filter(t => {
+        if (!t.closedFlag || !t.closedDate) return false
+        const closed = new Date(t.closedDate)
+        return closed >= period && closed <= periodEnd
+      }).length
 
       const totalServiceOpened = serviceOpened + workstationOpened
       const totalServiceClosed = serviceClosed + workstationClosed
 
-      // Project tickets (standard only, since filteredProjects excludes workstations)
-      const periodProjectTickets = filteredProjectTickets.filter(t => {
+      // Resolution time (avg hours for tickets closed in this period)
+      const closedInPeriod = filteredServiceTickets.filter(t => {
+        if (!t.closedFlag || !t.closedDate) return false
+        const closed = new Date(t.closedDate)
+        return closed >= period && closed <= periodEnd
+      })
+
+      const avgResolution = closedInPeriod.length > 0
+        ? closedInPeriod.reduce((sum, t) => sum + (t.resolutionTime || 0), 0) / closedInPeriod.length
+        : 0
+
+      // Project tickets (standard only)
+      const projectOpened = filteredProjectTickets.filter(t => {
         if (!t.dateEntered) return false
         const entered = new Date(t.dateEntered)
         return entered >= period && entered <= periodEnd
-      })
-      const projectOpened = periodProjectTickets.length
-      const projectClosed = periodProjectTickets.filter(t => t.closedFlag).length
+      }).length
+
+      const projectClosed = filteredProjectTickets.filter(t => {
+        if (!t.closedFlag || !t.closedDate) return false
+        const closed = new Date(t.closedDate)
+        return closed >= period && closed <= periodEnd
+      }).length
+
+      // Projects (Entities)
+      const projectsStarted = filteredProjects.filter(p => {
+        const start = p.actualStart || p.estimatedStart
+        if (!start) return false
+        return start >= period && start <= periodEnd
+      }).length
+
+      const projectsCompleted = filteredProjects.filter(p => {
+        const end = p.auditClosedDate || p.actualEnd || (p.closedFlag ? p.estimatedEnd : undefined)
+        if (!end) return false
+        return end >= period && end <= periodEnd
+      }).length
 
       return {
         date: format(period, formatStr),
@@ -230,11 +276,14 @@ export default function Trends() {
         billablePercent: totalHours > 0 ? Number(((billableHours / totalHours) * 100).toFixed(0)) : 0,
         serviceOpened: totalServiceOpened, serviceClosed: totalServiceClosed,
         projectOpened, projectClosed,
+        projectsStarted, projectsCompleted,
+        avgResolution: Number(avgResolution.toFixed(1)),
         totalTickets: totalServiceOpened + projectOpened,
         totalClosed: totalServiceClosed + projectClosed,
+        ...hoursByEngineer // Spread engineer hours for stacked chart
       }
     })
-  }, [filteredEntries, filteredServiceTickets, filteredProjectTickets, dateRange, granularity])
+  }, [filteredEntries, filteredServiceTickets, filteredProjectTickets, projects, projectTickets, dateRange, granularity, members])
 
   // Summary stats
   const summaryStats = useMemo(() => {
@@ -336,23 +385,33 @@ export default function Trends() {
           <h3 className="text-lg font-semibold text-white mb-4">Ticket Volume Trends</h3>
           <div className="h-96">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="date" stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 10 }} angle={-45} textAnchor="end" height={60} />
+              <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                <XAxis dataKey="date" stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 10 }} />
                 <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 12 }} />
-                <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#fff' }} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#fff' }}
+                  cursor={{ fill: 'rgba(55, 65, 81, 0.4)' }}
+                />
                 <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
-                <Brush dataKey="date" height={30} stroke="#8884d8" fill="#1f2937" tickFormatter={() => ''} />
+                <Brush
+                  dataKey="date"
+                  height={30}
+                  stroke="#4b5563"
+                  fill="#111827"
+                  tickFormatter={() => ''}
+                  travellerWidth={10}
+                />
                 {includesServiceDesk && (
                   <>
-                    <Bar dataKey="serviceOpened" name="Service Opened" fill="#06b6d4" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="serviceClosed" name="Service Closed" fill="#14b8a6" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="serviceOpened" name="Service Opened" fill="#06b6d4" radius={[4, 4, 0, 0]} stackId="a" />
+                    <Bar dataKey="serviceClosed" name="Service Closed" fill="#14b8a6" radius={[4, 4, 0, 0]} stackId="b" />
                   </>
                 )}
                 {includesProjects && (
                   <>
-                    <Bar dataKey="projectOpened" name="Project Opened" fill="#a855f7" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="projectClosed" name="Project Closed" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="projectOpened" name="Project Opened" fill="#a855f7" radius={[4, 4, 0, 0]} stackId="a" />
+                    <Bar dataKey="projectClosed" name="Project Closed" fill="#8b5cf6" radius={[4, 4, 0, 0]} stackId="b" />
                   </>
                 )}
               </BarChart>
@@ -360,6 +419,74 @@ export default function Trends() {
           </div>
         </div>
       )}
+
+      {/* NEW: Project Entity Volume */}
+      {includesProjects && (
+        <div className="bg-gray-800 rounded-lg p-6 mb-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Project Completions</h3>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                <XAxis dataKey="date" stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 10 }} />
+                <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 12 }} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#fff' }}
+                  cursor={{ fill: 'rgba(55, 65, 81, 0.4)' }}
+                />
+                <Legend iconType="circle" />
+                <Brush
+                  dataKey="date"
+                  height={20}
+                  stroke="#4b5563"
+                  fill="#111827"
+                  tickFormatter={() => ''}
+                  travellerWidth={10}
+                />
+                <Bar dataKey="projectsStarted" name="Projects Started" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="projectsCompleted" name="Projects Completed" fill="#22c55e" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* NEW: Comparison Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Workload Distribution */}
+        <div className="bg-gray-800 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Workload Distribution</h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                <XAxis dataKey="date" stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 10 }} />
+                <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 12 }} />
+                <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#fff' }} />
+                <Area type="monotone" dataKey="totalHours" name="Total Hours" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.3} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+          <p className="text-xs text-gray-500 mt-2 text-center">Hours trend over time</p>
+        </div>
+
+        {/* Resolution Time Trend */}
+        <div className="bg-gray-800 rounded-lg p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Avg Resolution Time (Hours)</h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                <XAxis dataKey="date" stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 10 }} />
+                <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 12 }} />
+                <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#fff' }} formatter={(v: number) => [`${v}h`, 'Avg Time']} />
+                <Line type="monotone" dataKey="avgResolution" name="Avg Hours" stroke="#f59e0b" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <p className="text-xs text-gray-500 mt-2 text-center">Based on tickets closed in period</p>
+        </div>
+      </div>
 
       {/* Billable % and Notes Quality */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
