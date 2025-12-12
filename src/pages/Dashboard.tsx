@@ -22,8 +22,10 @@ export default function Dashboard() {
 
   const {
     serviceTickets,
+    tickets: projectBoardTickets,
     isLoadingService,
     fetchServiceBoardTickets,
+    fetchProjectBoardTickets,
     syncServiceTickets,
     getTicketStats
   } = useTicketsStore()
@@ -55,6 +57,7 @@ export default function Dashboard() {
         fetchMembers(),
         fetchTimeEntries(), // Fetch ALL time entries (5 years)
         fetchServiceBoardTickets(),
+        fetchProjectBoardTickets(),
         fetchProjects(),
         fetchProjectTickets() // Fetch ALL project tickets
       ])
@@ -227,7 +230,8 @@ export default function Dashboard() {
   const filteredProjectTickets = useMemo(() => {
     if (!dateRange.start || !dateRange.end) return projectTickets
 
-    return projectTickets.filter(t => {
+    // 1. Standard Project Tickets
+    const standardTickets = projectTickets.filter(t => {
       // Team Filter
       if (selectedTeam !== 'All Company') {
         const teamMembers = TEAM_DEFINITIONS[selectedTeam] || []
@@ -252,7 +256,47 @@ export default function Dashboard() {
       }
       return true
     })
-  }, [projectTickets, selectedEngineerId, selectedTeam, members, dateRange])
+
+    // 2. Project Board Tickets
+    const boardTickets = projectBoardTickets
+      .filter(t => {
+        // Team Filter
+        if (selectedTeam !== 'All Company') {
+          const teamMembers = TEAM_DEFINITIONS[selectedTeam] || []
+          const isResourceInTeam = t.resources && teamMembers.some(id => t.resources?.toLowerCase().includes(id.toLowerCase()))
+          const isOwnerInTeam = t.owner && teamMembers.some(id => id.toLowerCase() === t.owner?.toLowerCase())
+          if (!isResourceInTeam && !isOwnerInTeam) return false
+        }
+
+        // Engineer Filter
+        if (selectedEngineerId) {
+          const member = members.find(m => m.id === selectedEngineerId)
+          if (member) {
+            const isResource = t.resources?.toLowerCase().includes(member.identifier.toLowerCase())
+            const isOwner = t.owner?.toLowerCase() === member.identifier.toLowerCase()
+            if (!isResource && !isOwner) return false
+          }
+        }
+
+        // Date Filter (Overlap Logic)
+        if (t.closedFlag) {
+          if (t.closedDate) {
+            const closedAt = new Date(t.closedDate)
+            return closedAt >= dateRange.start! && closedAt <= dateRange.end!
+          }
+        }
+        return true
+      })
+      .map(t => ({
+        ...t,
+        projectId: 0,
+        projectName: 'Project Board Misc',
+        phaseName: 'Project Board',
+        boardName: 'Project Board'
+      })) as any[] // cast to mixed type for compatibility
+
+    return [...standardTickets, ...boardTickets]
+  }, [projectTickets, projectBoardTickets, selectedEngineerId, selectedTeam, members, dateRange])
 
 
   // Calculate Stats
@@ -262,7 +306,7 @@ export default function Dashboard() {
 
   const projectTicketStats = useMemo(() => {
     // Use helper or derived locally
-    return getProjectTicketStats(filteredProjectTickets)
+    return getProjectTicketStats(filteredProjectTickets as any) // Force cast to avoid strict type check on helper
   }, [filteredProjectTickets, getProjectTicketStats])
 
   // Manual calculation for Project Tickets Closed (since helper returns statuses, not "closed" boolean count specifically)

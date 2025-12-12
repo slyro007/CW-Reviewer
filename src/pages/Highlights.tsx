@@ -30,7 +30,7 @@ export default function Highlights() {
   const { selectedEngineerId, selectedTeam } = useSelectedEngineerStore()
   const { members } = useMembersStore()
   const { entries, fetchTimeEntries } = useTimeEntriesStore()
-  const { serviceTickets, fetchServiceBoardTickets } = useTicketsStore()
+  const { serviceTickets, tickets: projectBoardTickets, fetchServiceBoardTickets, fetchProjectBoardTickets } = useTicketsStore()
   const { projects, projectTickets, fetchProjects, fetchProjectTickets } = useProjectsStore()
   const { getDateRange, getPeriodLabel } = useTimePeriodStore()
 
@@ -47,6 +47,7 @@ export default function Highlights() {
   // Fetch static data once on mount (tickets and projects don't depend on date range)
   useEffect(() => {
     fetchServiceBoardTickets()
+    fetchProjectBoardTickets()
     fetchProjects()
     fetchProjectTickets()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -114,6 +115,10 @@ export default function Highlights() {
     if (selectedEngineer) {
       const identifier = selectedEngineer.identifier.toLowerCase()
       // Get project IDs from time entries
+      // Exclude project board tickets from this logic? 
+      // Actually, if a time entry has projectId, it's a project. 
+      // If it only has ticketId (project board), it maps to filteredProjectTickets, NOT filteredProjects (Entities).
+
       const timeEntryProjectIds = new Set(
         filteredEntries
           .filter(e => e.memberId === selectedEngineer.id && e.projectId !== null && e.projectId !== undefined)
@@ -160,8 +165,10 @@ export default function Highlights() {
 
   const filteredProjectTickets = useMemo(() => {
     if (!includesProjects) return []
+
+    // 1. True Project Tickets
     const projectIds = filteredProjects.map(p => p.id)
-    return projectTickets.filter(t => {
+    const trueProjectTickets = projectTickets.filter(t => {
       // Filter by date range
       if (t.dateEntered) {
         const entered = new Date(t.dateEntered)
@@ -170,7 +177,32 @@ export default function Highlights() {
       // Filter by project
       return projectIds.includes(t.projectId)
     })
-  }, [projectTickets, filteredProjects, includesProjects, dateRange])
+
+    // 2. Project Board Tickets
+    const boardTickets = projectBoardTickets.filter(t => {
+      // Filter by date
+      if (t.dateEntered) {
+        const entered = new Date(t.dateEntered)
+        if (entered < dateRange.start || entered > dateRange.end) return false
+      }
+      // Filter by engineer/team
+      // We need to apply the same engineer filtering as filteredProjects?
+      // If selectedEngineer, filter by owner/resource:
+      if (selectedEngineer) {
+        const id = selectedEngineer.identifier.toLowerCase()
+        return t.owner?.toLowerCase() === id || t.resources?.toLowerCase().includes(id)
+      }
+      if (selectedTeam !== 'All Company') {
+        const teamIdentifiers = TEAM_DEFINITIONS[selectedTeam] || []
+        const isOwnerInTeam = teamIdentifiers.some((id: string) => id.toLowerCase() === t.owner?.toLowerCase())
+        const isResourceInTeam = t.resources && teamIdentifiers.some((id: string) => t.resources?.toLowerCase().includes(id.toLowerCase()))
+        return isOwnerInTeam || isResourceInTeam
+      }
+      return true
+    })
+
+    return [...trueProjectTickets, ...boardTickets]
+  }, [projectTickets, projectBoardTickets, filteredProjects, includesProjects, dateRange, selectedEngineer, selectedTeam])
 
   // Calculate achievements
   const achievements = useMemo((): Achievement[] => {

@@ -46,7 +46,7 @@ interface AIComparisonResult {
 export default function Compare() {
   const { members, selectedMembers, toggleMemberSelection, clearSelection } = useMembersStore()
   const { entries, fetchTimeEntries } = useTimeEntriesStore()
-  const { serviceTickets, fetchServiceBoardTickets } = useTicketsStore()
+  const { serviceTickets, tickets: projectBoardTickets, fetchServiceBoardTickets, fetchProjectBoardTickets } = useTicketsStore()
   const { projects, projectTickets, fetchProjects, fetchProjectTickets } = useProjectsStore()
   const { getDateRange, getPeriodLabel } = useTimePeriodStore()
 
@@ -69,9 +69,10 @@ export default function Compare() {
 
   useEffect(() => {
     fetchServiceBoardTickets()
+    fetchProjectBoardTickets()
     fetchProjects()
     fetchProjectTickets()
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchTimeEntries({
@@ -89,19 +90,46 @@ export default function Compare() {
 
   const filteredServiceTickets = useMemo(() => {
     return serviceTickets.filter(t => {
+      // Logic: Active in period OR Closed in period
+      // If dateEntered is missing, assume active? Or exclude?
       if (!t.dateEntered) return true
       const entered = new Date(t.dateEntered)
-      return entered >= dateRange.start && entered <= dateRange.end
+
+      // If closed, check closed/resolved date
+      if (t.closedFlag) {
+        const closedAt = t.closedDate ? new Date(t.closedDate) : (t.resolvedDate ? new Date(t.resolvedDate) : null)
+        if (closedAt) {
+          // It was active if it closed AFTER start AND entered BEFORE end
+          return closedAt >= dateRange.start && entered <= dateRange.end
+        }
+      }
+
+      // If open, active if entered BEFORE end
+      return entered <= dateRange.end
     })
   }, [serviceTickets, dateRange])
 
   const filteredProjectTickets = useMemo(() => {
-    return projectTickets.filter(t => {
+    // Combine Project Tickets and Project Board Tickets
+    // Project Board Tickets need to be mapped or just treated as valid targets since logic checks 'projectId' or 'resources'
+    // If we map them, we should ensure projectId is handled (can be 0 or null)
+    const combined = [...projectTickets, ...projectBoardTickets]
+
+    return combined.filter(t => {
+      // Logic: Active in period OR Closed in period
       if (!t.dateEntered) return true
       const entered = new Date(t.dateEntered)
-      return entered >= dateRange.start && entered <= dateRange.end
+
+      if (t.closedFlag) {
+        const closedAt = t.closedDate ? new Date(t.closedDate) : (t.resolvedDate ? new Date(t.resolvedDate) : null)
+        if (closedAt) {
+          return closedAt >= dateRange.start && entered <= dateRange.end
+        }
+      }
+
+      return entered <= dateRange.end
     })
-  }, [projectTickets, dateRange])
+  }, [projectTickets, projectBoardTickets, dateRange])
 
   const engineerStats = useMemo((): EngineerStats[] => {
     return selectedMembers.map(memberId => {

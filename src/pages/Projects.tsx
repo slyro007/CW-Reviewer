@@ -59,8 +59,11 @@ export default function Projects() {
     fetchProjects, fetchProjectTickets,
     getProjectStats, getProjectTicketStats
   } = useProjectsStore()
+  const { tickets: projectBoardTickets, fetchProjectBoardTickets } = useTicketsStore()
   const { entries } = useTimeEntriesStore()
   const { getPeriodLabel, getDateRange } = useTimePeriodStore()
+
+  // ... (keep state declarations)
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [showActiveOnly, setShowActiveOnly] = useState(false)
@@ -80,7 +83,8 @@ export default function Projects() {
   useEffect(() => {
     fetchProjects()
     fetchProjectTickets()
-  }, [])
+    fetchProjectBoardTickets()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Get unique statuses for filter
   const uniqueStatuses = useMemo(() => {
@@ -164,11 +168,21 @@ export default function Projects() {
     }
 
     return result
-  }, [projects, selectedEngineer, selectedTeam, statusFilter, searchQuery, entries])
+  }, [projects, selectedEngineer, selectedTeam, statusFilter, searchQuery, entries, projectTickets, members])
 
   // Filter project tickets based on engineer, date range, and filters
   const filteredTickets = useMemo(() => {
-    let result = projectTickets
+    // 1. Map Project Board tickets to ProjectTicket-like shape
+    const mappedBoardTickets = projectBoardTickets.map(t => ({
+      ...t,
+      projectId: 0, // No specific project entity
+      projectName: 'Project Board Misc',
+      phaseName: 'Project Board', // Group under this phase
+      boardName: 'Project Board'
+    })) as any[] // weak cast to mix types
+
+    // Combine
+    let result = [...projectTickets, ...mappedBoardTickets]
 
     // Filter by date range (dateEntered)
     result = result.filter(t => {
@@ -179,19 +193,24 @@ export default function Projects() {
 
     // Filter by selected project
     if (selectedProjectId) {
+      // If filtering by specific project, exclude board tickets (they have no project ID 0 typically)
+      // or only include if selectedProjectId match (which it won't)
       result = result.filter(t => t.projectId === selectedProjectId)
     }
 
     // Filter by selected engineer (resources)
     if (selectedEngineer) {
       result = result.filter(t =>
-        t.resources?.toLowerCase().includes(selectedEngineer.identifier.toLowerCase())
+        t.resources?.toLowerCase().includes(selectedEngineer.identifier.toLowerCase()) ||
+        t.owner?.toLowerCase() === selectedEngineer.identifier.toLowerCase()
       )
     } else if (selectedTeam !== 'All Company') {
       const teamIdentifiers = TEAM_DEFINITIONS[selectedTeam] || []
-      result = result.filter(t =>
-        t.resources && teamIdentifiers.some(id => t.resources?.toLowerCase().includes(id.toLowerCase()))
-      )
+      result = result.filter(t => {
+        const isResource = t.resources && teamIdentifiers.some((id: string) => t.resources?.toLowerCase().includes(id.toLowerCase()))
+        const isOwner = t.owner && teamIdentifiers.some((id: string) => id.toLowerCase() === t.owner.toLowerCase())
+        return isResource || isOwner
+      })
     }
 
     if (statusFilter !== 'all') {
@@ -209,7 +228,7 @@ export default function Projects() {
     }
 
     return result
-  }, [projectTickets, selectedEngineer, selectedProjectId, statusFilter, searchQuery, dateRange])
+  }, [projectTickets, projectBoardTickets, selectedEngineer, selectedTeam, selectedProjectId, statusFilter, searchQuery, dateRange])
 
   // Group tickets by phase
   const ticketsByPhase = useMemo(() => {

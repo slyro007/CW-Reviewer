@@ -32,7 +32,7 @@ export default function TimeTracking() {
   const { selectedEngineerId, selectedTeam } = useSelectedEngineerStore()
   const { members } = useMembersStore()
   const { entries, isLoading, fetchTimeEntries } = useTimeEntriesStore()
-  const { serviceTickets, fetchServiceBoardTickets } = useTicketsStore()
+  const { serviceTickets, tickets: projectBoardTickets, fetchServiceBoardTickets, fetchProjectBoardTickets } = useTicketsStore()
   const { projects, projectTickets, fetchProjects, fetchProjectTickets } = useProjectsStore()
   const { getDateRange, getPeriodLabel } = useTimePeriodStore()
 
@@ -48,6 +48,7 @@ export default function TimeTracking() {
   // Fetch static data once on mount (tickets and projects don't depend on date range)
   useEffect(() => {
     fetchServiceBoardTickets()
+    fetchProjectBoardTickets()
     fetchProjects()
     fetchProjectTickets()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -118,6 +119,7 @@ export default function TimeTracking() {
         memberTimeEntryProjectIds.has(p.id)
       ) : []
       const memberProjectIds = memberProjects.map(p => p.id)
+
       const memberProjectTickets = includesProjects ? projectTickets.filter(t => {
         // Filter by date range
         if (t.dateEntered) {
@@ -127,6 +129,18 @@ export default function TimeTracking() {
         // Filter by engineer
         return memberProjectIds.includes(t.projectId) || t.resources?.toLowerCase().includes(identifier)
       }) : []
+
+      // Add Project Board Tickets
+      const memberProjectBoardTickets = includesProjects ? projectBoardTickets.filter(t => {
+        if (t.dateEntered) {
+          const entered = new Date(t.dateEntered)
+          if (entered < dateRange.start || entered > dateRange.end) return false
+        }
+        return t.owner?.toLowerCase() === identifier || t.resources?.toLowerCase().includes(identifier)
+      }) : []
+
+      // Combined Project Tickets
+      const allProjectTickets = [...memberProjectTickets, ...memberProjectBoardTickets]
 
       return {
         memberId: member.id,
@@ -141,11 +155,11 @@ export default function TimeTracking() {
         daysWorked: uniqueDays,
         serviceTicketsWorked: memberServiceTickets.length,
         serviceTicketsClosed: memberServiceTickets.filter(t => t.closedFlag).length,
-        projectTicketsWorked: memberProjectTickets.length,
-        projectTicketsClosed: memberProjectTickets.filter(t => t.closedFlag).length,
+        projectTicketsWorked: allProjectTickets.length,
+        projectTicketsClosed: allProjectTickets.filter(t => t.closedFlag).length,
       }
     }).sort((a, b) => b.totalHours - a.totalHours)
-  }, [members, filteredEntries, serviceTickets, projects, projectTickets, selectedEngineerId, includesServiceDesk, includesProjects, dateRange])
+  }, [members, filteredEntries, serviceTickets, projects, projectTickets, projectBoardTickets, selectedEngineerId, includesServiceDesk, includesProjects, dateRange])
 
   // Aggregate stats
   const aggregateStats = useMemo(() => {
