@@ -9,7 +9,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import prisma from './db.js'
 import ConnectWiseClient from './connectwise.js'
-import { ALLOWED_ENGINEER_IDENTIFIERS, INACTIVE_ENGINEERS, SERVICE_BOARD_NAMES, MINIMUM_SYNC_INTERVAL_MS, SYNC_STALE_THRESHOLD_MS, SYNC_INCREMENTAL_FALLBACK } from './config.js'
+import { ALLOWED_ENGINEER_IDENTIFIERS, INACTIVE_ENGINEERS, SERVICE_BOARD_NAMES, SYNC_STALE_THRESHOLD_MS, SYNC_INCREMENTAL_FALLBACK } from './config.js'
 
 interface SyncStatus {
   entity: string

@@ -57,9 +57,16 @@ export default function TeamFilter() {
                     onChange={handleTeamChange}
                     className="bg-gray-800 border-gray-700 text-white text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5"
                 >
-                    {Object.keys(TEAM_DEFINITIONS).map((team) => (
-                        <option key={team} value={team}>{team}</option>
-                    ))}
+                    <optgroup label="Active Teams">
+                        <option value="All Company">All Company</option>
+                        <option value="Service Desk">Service Desk</option>
+                        <option value="Professional Services">Professional Services</option>
+                        <option value="Professional Services + Management">Professional Services + Management</option>
+                        <option value="Management">Management</option>
+                    </optgroup>
+                    <optgroup label="Inactive">
+                        <option value="Past Employees">Past Employees</option>
+                    </optgroup>
                 </select>
             </div>
 

@@ -418,20 +418,41 @@ async function syncTickets(client: any, allowedMemberIds: number[], modifiedSinc
       name.toLowerCase().includes(b.name?.toLowerCase())
     ))
     .map((b: any) => b.id)
-  const allTickets = await client.getTickets(
-    serviceBoardIds,
-    undefined,
-    undefined,
-    allowedIdentifiers, // Pass member identifiers for server-side filtering
-    {},
-    modifiedSince
-  )
-  const relevantTickets = allTickets.filter((t: any) => {
+
+  // Chunk identifiers to prevent URL overflow
+  const CHUNK_SIZE = 5
+  let totalDocs: any[] = []
+
+  for (let i = 0; i < allowedIdentifiers.length; i += CHUNK_SIZE) {
+    const chunkIdentifiers = allowedIdentifiers.slice(i, i + CHUNK_SIZE)
+    log(`   Fetching tickets for batch ${Math.floor(i / CHUNK_SIZE) + 1}/${Math.ceil(allowedIdentifiers.length / CHUNK_SIZE)}...`)
+
+    try {
+      const tickets = await client.getTickets(
+        serviceBoardIds,
+        undefined,
+        undefined,
+        chunkIdentifiers, // Pass chunked identifiers
+        {},
+        modifiedSince
+      )
+      totalDocs = [...totalDocs, ...tickets]
+    } catch (e: any) {
+      log(`   ⚠️ Batch failed: ${e.message}`)
+      // Continue to next batch instead of failing everything
+    }
+  }
+
+  // Deduplicate tickets (just in case)
+  const uniqueTickets = Array.from(new Map(totalDocs.map(item => [item.id, item])).values())
+
+  const relevantTickets = uniqueTickets.filter((t: any) => {
     const owner = t.owner?.identifier?.toLowerCase() || t.owner?.toLowerCase() || ''
     const resources = t.teamMember?.toLowerCase() || t.resources?.toLowerCase() || ''
     return allowedIdentifiers.includes(owner) ||
       allowedIdentifiers.some(id => resources.includes(id))
   })
+
   for (const ticket of relevantTickets) {
     const boardId = ticket.board?.id || ticket.boardId
     if (!boardId) continue
@@ -444,10 +465,10 @@ async function syncTickets(client: any, allowedMemberIds: number[], modifiedSinc
       create: {
         id: ticket.id, summary: ticket.summary, boardId,
         status: ticket.status?.name || ticket.status,
-        closedDate: ticket.closedDate ? new Date(ticket.closedDate) : null,
+        closedDate: ticket.closedDate ? new Date(ticket.closedDate) : (ticket._info?.closedDate ? new Date(ticket._info.closedDate) : null),
         closedFlag: ticket.closedFlag || false,
-        dateEntered: ticket.dateEntered ? new Date(ticket.dateEntered) : null,
-        resolvedDate: ticket.resolvedDate ? new Date(ticket.resolvedDate) : null,
+        dateEntered: ticket.dateEntered ? new Date(ticket.dateEntered) : (ticket._info?.dateEntered ? new Date(ticket._info.dateEntered) : null),
+        resolvedDate: ticket.resolvedDate ? new Date(ticket.resolvedDate) : (ticket._info?.dateResolved ? new Date(ticket._info.dateResolved) : null),
         owner: ticket.owner?.identifier || ticket.owner,
         company: ticket.company?.name || ticket.company,
         type: ticket.type?.name || ticket.type,
@@ -459,10 +480,10 @@ async function syncTickets(client: any, allowedMemberIds: number[], modifiedSinc
       update: {
         summary: ticket.summary, boardId,
         status: ticket.status?.name || ticket.status,
-        closedDate: ticket.closedDate ? new Date(ticket.closedDate) : null,
+        closedDate: ticket.closedDate ? new Date(ticket.closedDate) : (ticket._info?.closedDate ? new Date(ticket._info.closedDate) : null),
         closedFlag: ticket.closedFlag || false,
-        dateEntered: ticket.dateEntered ? new Date(ticket.dateEntered) : null,
-        resolvedDate: ticket.resolvedDate ? new Date(ticket.resolvedDate) : null,
+        dateEntered: ticket.dateEntered ? new Date(ticket.dateEntered) : (ticket._info?.dateEntered ? new Date(ticket._info.dateEntered) : null),
+        resolvedDate: ticket.resolvedDate ? new Date(ticket.resolvedDate) : (ticket._info?.dateResolved ? new Date(ticket._info.dateResolved) : null),
         owner: ticket.owner?.identifier || ticket.owner,
         company: ticket.company?.name || ticket.company,
         type: ticket.type?.name || ticket.type,
