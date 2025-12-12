@@ -41,10 +41,9 @@ export default async function handler(
 
     if (managerIdentifier) {
       where.managerIdentifier = managerIdentifier as string
-    } else {
-      // Default to only allowed engineers if no specific managers requested
-      where.managerIdentifier = { in: ALLOWED_ENGINEER_IDENTIFIERS }
     }
+    // Removed default filter to allow fetching projects where engineers are resources but not managers
+
 
     // Incremental fetch support
     if (modifiedSince) {

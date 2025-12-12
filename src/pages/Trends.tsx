@@ -154,9 +154,20 @@ export default function Trends() {
     // 1. True Project Tickets (from projectsStore)
     const projectIds = filteredProjects.map(p => p.id)
     const trueProjectTickets = projectTickets.filter(t => {
+      // Logic: Active in period OR Closed in period
       if (!t.dateEntered) return projectIds.includes(t.projectId)
       const entered = new Date(t.dateEntered)
-      return entered >= dateRange.start && entered <= dateRange.end && projectIds.includes(t.projectId)
+
+      // Must be related to filtered projects
+      if (!projectIds.includes(t.projectId)) return false
+
+      if (t.closedFlag) {
+        const closedAt = t.closedDate ? new Date(t.closedDate) : (t.resolvedDate ? new Date(t.resolvedDate) : null)
+        if (closedAt) {
+          return closedAt >= dateRange.start && entered <= dateRange.end
+        }
+      }
+      return entered <= dateRange.end
     })
 
     return trueProjectTickets
@@ -166,9 +177,17 @@ export default function Trends() {
   const filteredProjectBoardTickets = useMemo(() => {
     if (!includesProjects) return []
     return projectBoardTickets.filter(t => {
+      // Logic: Active in period OR Closed in period
       if (!t.dateEntered) return true
       const entered = new Date(t.dateEntered)
-      return entered >= dateRange.start && entered <= dateRange.end
+
+      if (t.closedFlag) {
+        const closedAt = t.closedDate ? new Date(t.closedDate) : (t.resolvedDate ? new Date(t.resolvedDate) : null)
+        if (closedAt) {
+          return closedAt >= dateRange.start && entered <= dateRange.end
+        }
+      }
+      return entered <= dateRange.end
     })
   }, [projectBoardTickets, dateRange, includesProjects])
 

@@ -98,13 +98,18 @@ export default function TimeTracking() {
 
       // Service desk stats - filter by date range and engineer
       const memberServiceTickets = includesServiceDesk ? serviceTickets.filter(t => {
-        // Filter by date range
-        if (t.dateEntered) {
-          const entered = new Date(t.dateEntered)
-          if (entered < dateRange.start || entered > dateRange.end) return false
+        // Overlap Logic
+        if (!t.dateEntered) return true
+        const entered = new Date(t.dateEntered)
+
+        if (t.closedFlag) {
+          const closedAt = t.closedDate ? new Date(t.closedDate) : (t.resolvedDate ? new Date(t.resolvedDate) : null)
+          if (closedAt) {
+            return closedAt >= dateRange.start && entered <= dateRange.end
+          }
         }
-        // Filter by engineer
-        return t.owner?.toLowerCase() === identifier || t.resources?.toLowerCase().includes(identifier)
+        return entered <= dateRange.end &&
+          (t.owner?.toLowerCase() === identifier || t.resources?.toLowerCase().includes(identifier))
       }) : []
 
       // Project stats - filter by date range and engineer
@@ -121,22 +126,36 @@ export default function TimeTracking() {
       const memberProjectIds = memberProjects.map(p => p.id)
 
       const memberProjectTickets = includesProjects ? projectTickets.filter(t => {
-        // Filter by date range
-        if (t.dateEntered) {
-          const entered = new Date(t.dateEntered)
-          if (entered < dateRange.start || entered > dateRange.end) return false
+        // Overlap Logic
+        if (!t.dateEntered) return memberProjectIds.includes(t.projectId)
+        const entered = new Date(t.dateEntered)
+
+        // Must be related
+        if (!memberProjectIds.includes(t.projectId) && !t.resources?.toLowerCase().includes(identifier)) return false
+
+        if (t.closedFlag) {
+          const closedAt = t.closedDate ? new Date(t.closedDate) : ((t as any).resolvedDate ? new Date((t as any).resolvedDate) : null)
+          if (closedAt) {
+            return closedAt >= dateRange.start && entered <= dateRange.end
+          }
         }
-        // Filter by engineer
-        return memberProjectIds.includes(t.projectId) || t.resources?.toLowerCase().includes(identifier)
+        return entered <= dateRange.end
       }) : []
 
       // Add Project Board Tickets
       const memberProjectBoardTickets = includesProjects ? projectBoardTickets.filter(t => {
-        if (t.dateEntered) {
-          const entered = new Date(t.dateEntered)
-          if (entered < dateRange.start || entered > dateRange.end) return false
+        // Overlap Logic
+        if (!t.dateEntered) return true
+        const entered = new Date(t.dateEntered)
+
+        if (t.closedFlag) {
+          const closedAt = t.closedDate ? new Date(t.closedDate) : (t.resolvedDate ? new Date(t.resolvedDate) : null)
+          if (closedAt) {
+            return closedAt >= dateRange.start && entered <= dateRange.end
+          }
         }
-        return t.owner?.toLowerCase() === identifier || t.resources?.toLowerCase().includes(identifier)
+        return entered <= dateRange.end &&
+          (t.owner?.toLowerCase() === identifier || t.resources?.toLowerCase().includes(identifier))
       }) : []
 
       // Combined Project Tickets

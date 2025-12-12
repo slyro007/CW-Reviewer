@@ -14,7 +14,7 @@ export default function CWWrapped() {
   const { selectedEngineerId } = useSelectedEngineerStore()
   const { members } = useMembersStore()
   const { entries, fetchTimeEntries } = useTimeEntriesStore()
-  const { serviceTickets, fetchServiceBoardTickets } = useTicketsStore()
+  const { serviceTickets, tickets: projectBoardTickets, fetchServiceBoardTickets, fetchProjectBoardTickets } = useTicketsStore()
   const { projects, projectTickets, fetchProjects, fetchProjectTickets } = useProjectsStore()
   const { getDateRange, getPeriodLabel } = useTimePeriodStore()
 
@@ -31,6 +31,7 @@ export default function CWWrapped() {
   // Fetch static data once on mount (tickets and projects don't depend on date range)
   useEffect(() => {
     fetchServiceBoardTickets()
+    fetchProjectBoardTickets()
     fetchProjects()
     fetchProjectTickets()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -54,9 +55,17 @@ export default function CWWrapped() {
   const filteredServiceTickets = useMemo(() => {
     if (!includesServiceDesk) return []
     let result = serviceTickets.filter(t => {
+      // Overlap Logic: Active in period OR Closed in period
       if (!t.dateEntered) return true
       const entered = new Date(t.dateEntered)
-      return entered >= dateRange.start && entered <= dateRange.end
+
+      if (t.closedFlag) {
+        const closedAt = t.closedDate ? new Date(t.closedDate) : (t.resolvedDate ? new Date(t.resolvedDate) : null)
+        if (closedAt) {
+          return closedAt >= dateRange.start && entered <= dateRange.end
+        }
+      }
+      return entered <= dateRange.end
     })
     if (selectedEngineer) {
       const ticketIds = new Set<number>()
@@ -91,8 +100,46 @@ export default function CWWrapped() {
   const filteredProjectTickets = useMemo(() => {
     if (!includesProjects) return []
     const projectIds = filteredProjects.map(p => p.id)
-    return projectTickets.filter(t => projectIds.includes(t.projectId))
-  }, [projectTickets, filteredProjects, includesProjects])
+
+    // 1. True Project Tickets
+    const trueTickets = projectTickets.filter(t => {
+      // Filter by Project Relationship
+      if (!projectIds.includes(t.projectId)) return false
+
+      // Filter by Date Overlap
+      if (!t.dateEntered) return true
+      const entered = new Date(t.dateEntered)
+      if (t.closedFlag) {
+        const closedAt = t.closedDate ? new Date(t.closedDate) : ((t as any).resolvedDate ? new Date((t as any).resolvedDate) : null)
+        if (closedAt) {
+          return closedAt >= dateRange.start && entered <= dateRange.end
+        }
+      }
+      return entered <= dateRange.end
+    })
+
+    // 2. Project Board Tickets
+    const boardTickets = projectBoardTickets.filter(t => {
+      // Filter by Date Overlap
+      if (!t.dateEntered) return true
+      const entered = new Date(t.dateEntered)
+      if (t.closedFlag) {
+        const closedAt = t.closedDate ? new Date(t.closedDate) : ((t as any).resolvedDate ? new Date((t as any).resolvedDate) : null)
+        if (closedAt) {
+          return closedAt >= dateRange.start && entered <= dateRange.end
+        }
+      }
+      // Filter by Engineer (active or owner)
+      if (selectedEngineer) {
+        const id = selectedEngineer.identifier.toLowerCase()
+        return (t.owner?.toLowerCase() === id || t.resources?.toLowerCase().includes(id)) && entered <= dateRange.end
+      }
+
+      return entered <= dateRange.end
+    })
+
+    return [...trueTickets, ...boardTickets]
+  }, [projectTickets, projectBoardTickets, filteredProjects, includesProjects, dateRange, selectedEngineer])
 
   // Calculate wrapped stats
   const wrappedStats = useMemo(() => {

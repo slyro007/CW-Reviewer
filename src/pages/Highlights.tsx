@@ -79,9 +79,17 @@ export default function Highlights() {
   const filteredServiceTickets = useMemo(() => {
     if (!includesServiceDesk) return []
     let result = serviceTickets.filter(t => {
+      // Overlap Logic
       if (!t.dateEntered) return true
       const entered = new Date(t.dateEntered)
-      return entered >= dateRange.start && entered <= dateRange.end
+
+      if (t.closedFlag) {
+        const closedAt = t.closedDate ? new Date(t.closedDate) : (t.resolvedDate ? new Date(t.resolvedDate) : null)
+        if (closedAt) {
+          return closedAt >= dateRange.start && entered <= dateRange.end
+        }
+      }
+      return entered <= dateRange.end
     })
     if (selectedEngineer) {
       const ticketIds = new Set<number>()
@@ -169,25 +177,37 @@ export default function Highlights() {
     // 1. True Project Tickets
     const projectIds = filteredProjects.map(p => p.id)
     const trueProjectTickets = projectTickets.filter(t => {
-      // Filter by date range
-      if (t.dateEntered) {
-        const entered = new Date(t.dateEntered)
-        if (entered < dateRange.start || entered > dateRange.end) return false
+      // Overlap Logic
+      if (!t.dateEntered) return projectIds.includes(t.projectId)
+      const entered = new Date(t.dateEntered)
+
+      // Must be related to filtered projects
+      if (!projectIds.includes(t.projectId)) return false
+
+      if (t.closedFlag) {
+        const closedAt = t.closedDate ? new Date(t.closedDate) : ((t as any).resolvedDate ? new Date((t as any).resolvedDate) : null)
+        if (closedAt) {
+          return closedAt >= dateRange.start && entered <= dateRange.end
+        }
       }
-      // Filter by project
-      return projectIds.includes(t.projectId)
+      return entered <= dateRange.end
     })
 
     // 2. Project Board Tickets
     const boardTickets = projectBoardTickets.filter(t => {
-      // Filter by date
-      if (t.dateEntered) {
-        const entered = new Date(t.dateEntered)
-        if (entered < dateRange.start || entered > dateRange.end) return false
+      // Overlap Logic
+      if (!t.dateEntered) return true
+      const entered = new Date(t.dateEntered)
+
+      if (t.closedFlag) {
+        const closedAt = t.closedDate ? new Date(t.closedDate) : (t.resolvedDate ? new Date(t.resolvedDate) : null)
+        if (closedAt) {
+          return closedAt >= dateRange.start && entered <= dateRange.end
+        }
       }
+      if (entered > dateRange.end) return false
+
       // Filter by engineer/team
-      // We need to apply the same engineer filtering as filteredProjects?
-      // If selectedEngineer, filter by owner/resource:
       if (selectedEngineer) {
         const id = selectedEngineer.identifier.toLowerCase()
         return t.owner?.toLowerCase() === id || t.resources?.toLowerCase().includes(id)
