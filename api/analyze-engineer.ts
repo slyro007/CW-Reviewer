@@ -183,7 +183,9 @@ export default async function handler(
 
                 // Only continue if it's a rate limit or context length error
                 // 429 = Rate Limit, 400 = Bad Request (often Context Length)
-                const isRetryable = err.message.includes('429') ||
+                const isRetryable =
+                    err.message.includes('429') ||
+                    err.message.includes('Too Many Requests') ||
                     err.message.includes('400') ||
                     err.message.includes('context_length_exceeded') ||
                     err.message.includes('string too long')
@@ -191,6 +193,9 @@ export default async function handler(
                 if (!isRetryable) {
                     throw err // Fatal error (auth, network, etc)
                 }
+
+                console.log('  -> Retryable error. Waiting 2s before next strategy...')
+                await new Promise(resolve => setTimeout(resolve, 2000))
             }
         }
 

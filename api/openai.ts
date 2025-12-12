@@ -227,7 +227,7 @@ class OpenAIClient {
     })
 
     if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.statusText}`)
+      throw new Error(`OpenAI API error ${response.status}: ${response.statusText}`)
     }
 
     const result = await response.json()
