@@ -551,7 +551,6 @@ export default function Trends() {
                 <Tooltip
                   contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
                   itemStyle={{ color: '#d1d5db' }}
-                  labelFormatter={(label) => format(new Date(label), formatStr)}
                   formatter={(value: number, name: string) => [
                     value.toFixed(1),
                     name
@@ -601,7 +600,6 @@ export default function Trends() {
                 <Tooltip
                   contentStyle={{ backgroundColor: '#1f2937', borderColor: '#374151', color: '#f3f4f6' }}
                   itemStyle={{ color: '#d1d5db' }}
-                  labelFormatter={(label) => format(new Date(label), formatStr)}
                   formatter={(value: number) => [`${value.toFixed(1)}h`, 'Avg Time']}
                 />      <Line type="monotone" dataKey="avgResolution" name="Avg Hours" stroke="#f59e0b" strokeWidth={2} dot={false} />
               </LineChart>
