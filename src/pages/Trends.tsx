@@ -13,7 +13,6 @@ import {
 import { format, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval } from 'date-fns'
 import { isStandardProject, isWorkstationProject } from '@/lib/projectUtils'
 import ChartExplanation from '@/components/ChartExplanation'
-import { Info } from 'lucide-react'
 
 type Granularity = 'day' | 'week' | 'month'
 
@@ -296,7 +295,7 @@ export default function Trends() {
     const keys = new Set<string>()
     chartData.forEach(d => {
       Object.keys(d).forEach(k => {
-        if (k !== 'totalHours' && typeof d[k] === 'number' && !['billableHours', 'nonBillableHours', 'notesPercent', 'billablePercent', 'serviceOpened', 'serviceClosed', 'projectOpened', 'projectClosed', 'projectsStarted', 'projectsCompleted', 'avgResolution', 'totalTickets', 'totalClosed'].includes(k)) {
+        if (k !== 'totalHours' && typeof (d as any)[k] === 'number' && !['billableHours', 'nonBillableHours', 'notesPercent', 'billablePercent', 'serviceOpened', 'serviceClosed', 'projectOpened', 'projectClosed', 'projectsStarted', 'projectsCompleted', 'avgResolution', 'totalTickets', 'totalClosed'].includes(k)) {
           keys.add(k)
         }
       })

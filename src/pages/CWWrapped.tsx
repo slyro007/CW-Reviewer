@@ -137,7 +137,7 @@ export default function CWWrapped() {
       projectTicketsCompleted,
       // Fun
       topCompanies: sortedCompanies,
-      coffeeBreaks: Math.round(totalHours / 4),
+      contextSwitches: entries.length,
     }
   }, [filteredEntries, filteredServiceTickets, filteredProjects, filteredProjectTickets])
 
@@ -253,8 +253,16 @@ export default function CWWrapped() {
             <p className="text-sm text-white/80">Documented</p>
           </div>
           <div>
-            <p className="text-4xl font-bold">{wrappedStats.coffeeBreaks}</p>
-            <p className="text-sm text-white/80">Coffee Breaks ☕</p>
+            <div className="group relative">
+              <p className="text-4xl font-bold">{wrappedStats.contextSwitches}</p>
+              <p className="text-sm text-white/80 border-b border-dashed border-white/30 inline-block cursor-help">Context Switches 🔀</p>
+
+              {/* Tooltip */}
+              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-xs text-gray-300 rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 border border-gray-700">
+                Number of individual time entries logged.
+                <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900"></div>
+              </div>
+            </div>
           </div>
         </div>
       ),

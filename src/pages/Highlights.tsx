@@ -236,7 +236,7 @@ export default function Highlights() {
     const totalHours = filteredEntries.reduce((sum, e) => sum + e.hours, 0)
     return {
       totalHours,
-      coffees: Math.round(totalHours / 2),
+      contextSwitches: filteredEntries.length,
       serviceResolved: filteredServiceTickets.filter(t => t.closedFlag).length,
       projectsActive: filteredProjects.filter(p => !p.closedFlag).length,
     }
@@ -304,9 +304,14 @@ export default function Highlights() {
             <p className="text-4xl font-bold text-white">{funStats.totalHours.toFixed(0)}</p>
             <p className="text-gray-300">Hours Logged</p>
           </div>
-          <div className="text-center">
-            <p className="text-4xl font-bold text-white">{funStats.coffees}</p>
-            <p className="text-gray-300">Days of Work</p>
+          <div className="text-center group relative cursor-help">
+            <p className="text-4xl font-bold text-white">{funStats.contextSwitches}</p>
+            <p className="text-gray-300 border-b border-dashed border-gray-500 inline-block">Context Switches</p>
+            {/* Tooltip */}
+            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-xs text-gray-300 rounded shadow-xl opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 border border-gray-700">
+              Total time entries logged per task.
+              <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900"></div>
+            </div>
           </div>
           {includesServiceDesk && (
             <div className="text-center">
