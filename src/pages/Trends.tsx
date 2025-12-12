@@ -20,7 +20,7 @@ export default function Trends() {
   const { selectedEngineerId, selectedTeam } = useSelectedEngineerStore()
   const { members } = useMembersStore()
   const { entries, fetchTimeEntries } = useTimeEntriesStore()
-  const { serviceTickets, fetchServiceBoardTickets } = useTicketsStore()
+  const { serviceTickets, tickets: projectBoardTickets, fetchServiceBoardTickets, fetchProjectBoardTickets } = useTicketsStore()
   const { projects, projectTickets, fetchProjects, fetchProjectTickets } = useProjectsStore()
   const { getDateRange, getPeriodLabel, timePeriod } = useTimePeriodStore()
 
@@ -42,6 +42,7 @@ export default function Trends() {
   // Fetch static data once on mount (tickets and projects don't depend on date range)
   useEffect(() => {
     fetchServiceBoardTickets()
+    fetchProjectBoardTickets() // Fetch tickets from "Project Board"
     fetchProjects()
     fetchProjectTickets()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -149,13 +150,27 @@ export default function Trends() {
 
   const filteredProjectTickets = useMemo(() => {
     if (!includesProjects) return []
+
+    // 1. True Project Tickets (from projectsStore)
     const projectIds = filteredProjects.map(p => p.id)
-    return projectTickets.filter(t => {
+    const trueProjectTickets = projectTickets.filter(t => {
       if (!t.dateEntered) return projectIds.includes(t.projectId)
       const entered = new Date(t.dateEntered)
       return entered >= dateRange.start && entered <= dateRange.end && projectIds.includes(t.projectId)
     })
+
+    return trueProjectTickets
   }, [projectTickets, filteredProjects, dateRange, includesProjects])
+
+  // Memoized Project Board tickets (filtered)
+  const filteredProjectBoardTickets = useMemo(() => {
+    if (!includesProjects) return []
+    return projectBoardTickets.filter(t => {
+      if (!t.dateEntered) return true
+      const entered = new Date(t.dateEntered)
+      return entered >= dateRange.start && entered <= dateRange.end
+    })
+  }, [projectBoardTickets, dateRange, includesProjects])
 
   // Helper to get format string based on granularity
   const formatStr = useMemo(() => {
@@ -179,14 +194,15 @@ export default function Trends() {
       default: periods = eachDayOfInterval(dateRange)
     }
 
+    // Create Set of "Project Board Ticket" IDs for fast lookup
+    const projectBoardTicketIds = new Set(filteredProjectBoardTickets.map(t => t.id))
+
     return periods.map(period => {
+      // Correct end of period calculation
       let periodEnd: Date
-      switch (granularity) {
-        case 'day': periodEnd = new Date(period); periodEnd.setHours(23, 59, 59, 999); break
-        case 'week': periodEnd = new Date(period); periodEnd.setDate(periodEnd.getDate() + 6); periodEnd.setHours(23, 59, 59, 999); break
-        case 'month': periodEnd = new Date(period.getFullYear(), period.getMonth() + 1, 0, 23, 59, 59, 999); break
-        default: periodEnd = new Date(period); periodEnd.setHours(23, 59, 59, 999)
-      }
+      if (granularity === 'day') periodEnd = new Date(period.getTime() + 24 * 60 * 60 * 1000 - 1)
+      else if (granularity === 'week') periodEnd = new Date(period.getTime() + 7 * 24 * 60 * 60 * 1000 - 1)
+      else periodEnd = new Date(new Date(period).setMonth(period.getMonth() + 1) - 1)
 
       const periodEntries = filteredEntries.filter(e => {
         const entryDate = new Date(e.dateStart)
@@ -194,34 +210,20 @@ export default function Trends() {
         if (!inPeriod) return false
 
         // Filter by Data Source
-        // If entry has ticketId, it's Service (usually). If projectId, it's Project.
-        // Some entries might be purely internal (no ticket/project) - we tend to treat those as 'Service' or 'Other' depending on intent.
-        // For now, strict:
-        // if !includesServiceDesk, exclude if it HAS a ticketId OR is internal (no project)? 
-        // Let's assume:
-        // Project Work = has projectId
-        // Service Work = has ticketId (or no project and no ticket? - "General Admin")
-
-        // Actually, logic is simpler:
-        // if it matches a project, mapped to project.
-        // if it matches a ticket, mapped to service.
-
-        let isProject = !!e.projectId
-        let isService = !!e.ticketId
-        // Refined: Workstation projects behave like service? existing logic handles that in ticket counts, but for hours:
-        // If it's a workstation project, is it Project or Service hour?
-        // Usually Project hours unless explicitly re-mapped. Use standard 'projectId' check.
+        let isProject = !!e.projectId || (e.ticketId ? projectBoardTicketIds.has(e.ticketId) : false)
+        let isService = !!e.ticketId && !projectBoardTicketIds.has(e.ticketId) // Strict: if it's a project board ticket, it's NOT service
 
         if (includesProjects && isProject) return true
         if (includesServiceDesk && isService) return true
-        // If specific logic for "Internal/Standard" entries without IDs:
         if (includesServiceDesk && !isProject && !isService) return true
 
         return false
       })
 
       const totalHours = periodEntries.reduce((sum, e) => sum + e.hours, 0)
-      const billableHours = periodEntries.filter(e => e.billableOption === 'Billable').reduce((sum, e) => sum + e.hours, 0)
+      const billableHours = periodEntries
+        .filter(e => e.billableOption === 'Billable')
+        .reduce((sum, e) => sum + e.hours, 0)
       const withNotes = periodEntries.filter(e => e.notes && e.notes.trim().length > 0).length
       const notesPercent = periodEntries.length > 0 ? (withNotes / periodEntries.length) * 100 : 0
 
@@ -256,60 +258,57 @@ export default function Trends() {
         return closed >= period && closed <= periodEnd
       }).length
 
-      // Workstation Project Tickets (treated as Service)
-      const workstationProjectIds = new Set(projects.filter(isWorkstationProject).map(p => p.id))
-      const workstationTickets = projectTickets.filter(t => workstationProjectIds.has(t.projectId))
-
-      const workstationOpened = workstationTickets.filter(t => {
-        if (!t.dateEntered) return false
-        const entered = new Date(t.dateEntered)
-        return entered >= period && entered <= periodEnd
-      }).length
-
-      const workstationClosed = workstationTickets.filter(t => {
-        if (!t.closedFlag || !t.closedDate) return false
-        const closed = new Date(t.closedDate)
-        return closed >= period && closed <= periodEnd
-      }).length
-
-      const totalServiceOpened = serviceOpened + workstationOpened
-      const totalServiceClosed = serviceClosed + workstationClosed
-
-      // Resolution time (avg hours for tickets closed in this period)
-      const closedInPeriod = filteredServiceTickets.filter(t => {
-        if (!t.closedFlag || !t.closedDate) return false
-        const closed = new Date(t.closedDate)
-        return closed >= period && closed <= periodEnd
-      })
-
-      const avgResolution = closedInPeriod.length > 0
-        ? closedInPeriod.reduce((sum, t) => sum + (t.resolutionTime || 0), 0) / closedInPeriod.length
-        : 0
-
       // Project tickets (standard only)
       const projectOpened = filteredProjectTickets.filter(t => {
         if (!t.dateEntered) return false
         const entered = new Date(t.dateEntered)
         return entered >= period && entered <= periodEnd
-      }).length
+      }).length + filteredProjectBoardTickets.filter(t => {
+        if (!t.dateEntered) return false
+        const d = new Date(t.dateEntered)
+        return d >= period && d <= periodEnd
+      }).length // Add Board Project Tickets to volume
 
       const projectClosed = filteredProjectTickets.filter(t => {
         if (!t.closedFlag || !t.closedDate) return false
         const closed = new Date(t.closedDate)
         return closed >= period && closed <= periodEnd
+      }).length + filteredProjectBoardTickets.filter(t => {
+        if (!t.closedDate) return false
+        const d = new Date(t.closedDate)
+        return d >= period && d <= periodEnd
       }).length
+
+      // Resolution time (avg hours for tickets closed in this period)
+      const closedServiceInPeriod = filteredServiceTickets.filter(t => t.closedDate && new Date(t.closedDate) >= period && new Date(t.closedDate) <= periodEnd)
+      const closedProjectBoardInPeriod = filteredProjectBoardTickets.filter(t => t.closedDate && new Date(t.closedDate) >= period && new Date(t.closedDate) <= periodEnd)
+
+      let totalResTime = 0
+      let countRes = 0
+
+      if (includesServiceDesk) {
+        closedServiceInPeriod.forEach(t => { if (t.resolutionTime) { totalResTime += t.resolutionTime; countRes++ } })
+      }
+      if (includesProjects) {
+        closedProjectBoardInPeriod.forEach(t => {
+          // resolutionTime on Ticket type
+          if (t.resolutionTime) { totalResTime += t.resolutionTime; countRes++ }
+        })
+      }
+
+      const avgResolution = countRes > 0 ? totalResTime / countRes : 0
 
       // Projects (Entities)
       const projectsStarted = filteredProjects.filter(p => {
         const start = p.actualStart || p.estimatedStart
         if (!start) return false
-        return start >= period && start <= periodEnd
+        return new Date(start) >= period && new Date(start) <= periodEnd
       }).length
 
       const projectsCompleted = filteredProjects.filter(p => {
         const end = p.auditClosedDate || p.actualEnd || (p.closedFlag ? p.estimatedEnd : undefined)
         if (!end) return false
-        return end >= period && end <= periodEnd
+        return new Date(end) >= period && new Date(end) <= periodEnd
       }).length
 
       return {
@@ -319,16 +318,16 @@ export default function Trends() {
         nonBillableHours: Number((totalHours - billableHours).toFixed(1)),
         notesPercent: Number(notesPercent.toFixed(0)),
         billablePercent: totalHours > 0 ? Number(((billableHours / totalHours) * 100).toFixed(0)) : 0,
-        serviceOpened: totalServiceOpened, serviceClosed: totalServiceClosed,
-        projectOpened, projectClosed,
-        projectsStarted, projectsCompleted,
+        serviceOpened: serviceOpened, serviceClosed: serviceClosed,
+        projectOpened: projectOpened, projectClosed: projectClosed,
+        projectsStarted: projectsStarted, projectsCompleted: projectsCompleted,
         avgResolution: Number(avgResolution.toFixed(1)),
-        totalTickets: totalServiceOpened + projectOpened,
-        totalClosed: totalServiceClosed + projectClosed,
+        totalTickets: serviceOpened + projectOpened,
+        totalClosed: serviceClosed + projectClosed,
         ...hoursByEngineer // Spread engineer hours for stacked chart
       }
     })
-  }, [filteredEntries, filteredServiceTickets, filteredProjectTickets, projects, projectTickets, dateRange, granularity, members])
+  }, [granularity, dateRange, filteredEntries, filteredServiceTickets, filteredProjectTickets, filteredProjects, members, formatStr, includesServiceDesk, includesProjects, filteredProjectBoardTickets])
 
   // Prepare Engineer Stack specific keys
   const engineerKeys = useMemo(() => {
@@ -345,24 +344,37 @@ export default function Trends() {
   }, [chartData])
 
 
-  // Summary stats
+  // Calculate summary stats
   const summaryStats = useMemo(() => {
-    const totalHours = filteredEntries.reduce((sum, e) => sum + e.hours, 0)
-    const billableHours = filteredEntries.filter(e => e.billableOption === 'Billable').reduce((sum, e) => sum + e.hours, 0)
-    const withNotes = filteredEntries.filter(e => e.notes && e.notes.trim().length > 0).length
+    // Replicate source-aware filtering for Total/Billable Hours summary
+    const projectBoardTicketIds = new Set(filteredProjectBoardTickets.map(t => t.id))
+
+    const sourceFilteredEntries = filteredEntries.filter(e => {
+      let isProject = !!e.projectId || (e.ticketId ? projectBoardTicketIds.has(e.ticketId) : false)
+      let isService = !!e.ticketId && !projectBoardTicketIds.has(e.ticketId)
+
+      if (includesProjects && isProject) return true
+      if (includesServiceDesk && isService) return true
+      if (includesServiceDesk && !isProject && !isService) return true
+      return false
+    })
+
+    const totalHours = sourceFilteredEntries.reduce((sum, e) => sum + e.hours, 0)
+    const billableHours = sourceFilteredEntries
+      .filter(e => e.billableOption === 'Billable')
+      .reduce((sum, e) => sum + e.hours, 0)
+
+    const billablePercent = totalHours > 0 ? Math.round((billableHours / totalHours) * 100) : 0
 
     return {
-      totalHours, billableHours,
-      billablePercent: totalHours > 0 ? (billableHours / totalHours) * 100 : 0,
-      entryCount: filteredEntries.length,
-      notesPercent: filteredEntries.length > 0 ? (withNotes / filteredEntries.length) * 100 : 0,
-      avgHoursPerDay: chartData.length > 0 ? totalHours / chartData.length : 0,
+      totalHours: Number(totalHours.toFixed(1)),
+      billablePercent,
       serviceTickets: filteredServiceTickets.length,
       serviceClosed: filteredServiceTickets.filter(t => t.closedFlag).length,
-      projectTickets: filteredProjectTickets.length,
-      projectClosed: filteredProjectTickets.filter(t => t.closedFlag).length,
+      projectTickets: filteredProjectTickets.length + filteredProjectBoardTickets.length,
+      projectClosed: filteredProjectTickets.filter(t => t.closedFlag).length + filteredProjectBoardTickets.filter(t => t.closedFlag).length
     }
-  }, [filteredEntries, filteredServiceTickets, filteredProjectTickets, chartData])
+  }, [filteredEntries, filteredServiceTickets, filteredProjectTickets, filteredProjectBoardTickets, includesProjects, includesServiceDesk])
 
   return (
     <div className="px-4 py-6 sm:px-0">
