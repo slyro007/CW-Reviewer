@@ -59,6 +59,9 @@ export interface Ticket {
   estimatedHours?: number
   actualHours?: number
   resources?: string // Team members/resources (comma-separated identifiers)
+  subtype?: string
+  item?: string
+  initialDescription?: string
 }
 
 // Board types
@@ -113,6 +116,9 @@ export interface ProjectTicket {
   budgetHours?: number
   dateEntered?: Date
   closedDate?: Date
+  subtype?: string
+  item?: string
+  initialDescription?: string
 }
 
 // Trend data types

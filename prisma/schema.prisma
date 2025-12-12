@@ -78,6 +78,9 @@ model Ticket {
   company         String?   // Company name
   type            String?   // Ticket type
   priority        String?   // Priority level
+  subtype         String?   // Ticket subtype (e.g., "Software", "Hardware")
+  item            String?   // Ticket item (e.g., "Excel", "Mouse")
+  initialDescription String? // The "Problem" description (truncated to 2000 chars)
   resources       String?   // Comma-separated resource identifiers
   estimatedHours  Float?
   actualHours     Float?
@@ -188,7 +191,11 @@ model ProjectTicket {
   wbsCode         String?
   budgetHours     Float?
   actualHours     Float?
+  subtype         String?   // Ticket subtype
+  item            String?   // Ticket item
+  initialDescription String? // The "Problem" description
   dateEntered     DateTime?
+
   closedDate      DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt

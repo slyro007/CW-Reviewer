@@ -427,6 +427,9 @@ async function syncTickets(client: any, allowedMemberIds: number[], modifiedSinc
         resources: ticket.teamMember || ticket.resources,
         estimatedHours: ticket.estimatedHours,
         actualHours: ticket.actualHours,
+        subtype: ticket.subType?.name,
+        item: ticket.item?.name,
+        initialDescription: ticket.initialDescription ? ticket.initialDescription.substring(0, 10000) : null,
       },
       update: {
         summary: ticket.summary,
@@ -443,6 +446,9 @@ async function syncTickets(client: any, allowedMemberIds: number[], modifiedSinc
         resources: ticket.teamMember || ticket.resources,
         estimatedHours: ticket.estimatedHours,
         actualHours: ticket.actualHours,
+        subtype: ticket.subType?.name,
+        item: ticket.item?.name,
+        initialDescription: ticket.initialDescription ? ticket.initialDescription.substring(0, 10000) : null,
       }
     })
   }
