@@ -1,22 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import prisma from './db.js'
 import OpenAIClient from './openai.js'
-import fs from 'fs'
-import path from 'path'
 
 // Helper to format date concisely
 const formatDate = (d: Date) => d.toISOString().split('T')[0]
-
-// Helper to sanitize filename
-const getAssessmentPath = (identifier: string) => {
-    // Determine root dir (process.cwd() usually works in Vercel/Node for local dev)
-    const rootDir = process.cwd()
-    const dir = path.join(rootDir, 'assessments')
-    if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true })
-    }
-    return path.join(dir, `${identifier}.md`)
-}
 
 export default async function handler(
     req: VercelRequest,
@@ -41,21 +28,28 @@ export default async function handler(
             return res.status(400).json({ error: 'memberIdentifier is required' })
         }
 
-        // 1. Check for existing file
-        const filePath = getAssessmentPath(memberIdentifier)
-        if (fs.existsSync(filePath) && !forceRefresh) {
-            const stats = fs.statSync(filePath)
-            const content = fs.readFileSync(filePath, 'utf-8')
+        const cacheKey = `assessment_${memberIdentifier}`
 
-            // Extract persisted metadata if possible, or just return basic stats
-            // For simplicity, we'll return the content and let the client assume it's valid
-            return res.status(200).json({
-                analysis: content,
-                stats: {
-                    cached: true,
-                    lastUpdated: stats.mtime.toISOString()
-                }
+        // 1. Check DB Cache
+        if (!forceRefresh) {
+            const cached = await prisma.analysisCache.findUnique({
+                where: { cacheKey }
             })
+
+            if (cached && cached.expiresAt > new Date()) {
+                // Type guard for the JSON data
+                const data = cached.data as any
+                if (data && data.analysis) {
+                    return res.status(200).json({
+                        analysis: data.analysis,
+                        stats: {
+                            ...data.stats, // Include cached stats if available
+                            cached: true,
+                            lastUpdated: cached.updatedAt.toISOString()
+                        }
+                    })
+                }
+            }
         }
 
         if (!process.env.OPENAI_API_KEY) {
@@ -71,8 +65,7 @@ export default async function handler(
             return res.status(404).json({ error: 'Member not found' })
         }
 
-        // 3. Fetch ALL Data (No limits)
-        // We will fetch everything but select only necessary fields to reduce DB load
+        // 3. Fetch ALL Data
         const timeEntries = await prisma.timeEntry.findMany({
             where: { memberId: member.id },
             orderBy: { dateStart: 'desc' },
@@ -85,11 +78,10 @@ export default async function handler(
             }
         })
 
-        // Calculate aggregate stats
+        // Stats
         const totalEntries = timeEntries.length
         const totalHours = timeEntries.reduce((sum, t) => sum + t.hours, 0)
 
-        // Fetch related projects
         const projects = await prisma.project.findMany({
             where: {
                 OR: [
@@ -113,15 +105,10 @@ export default async function handler(
             analyzedAt: new Date().toISOString()
         }
 
-        // 4. Data Compression for Prompt
-        // Format: "YYYY-MM-DD|Title|Notes(Truncated)"
-        // We try to fit as much as possible. 
-        // If > 2000 entries, we might only send detailed recent 2000 and summaries for older.
-        // For now, let's just dump ALL and rely on "Smart Compression" (truncate notes).
-
+        // 4. Compress
         const recentWork = timeEntries.map(t => {
             const title = t.ticket?.summary || t.project?.name || 'No Title'
-            const cleanTitle = title.replace(/\|/g, '-').substring(0, 50) // No pipes, max 50 chars
+            const cleanTitle = title.replace(/\|/g, '-').substring(0, 50)
             const cleanNotes = (t.notes || '').replace(/\s+/g, ' ').replace(/\|/g, '-').substring(0, 100)
             return `${formatDate(t.dateStart)}|${t.hours}|${cleanTitle}|${cleanNotes}`
         }).join('\n')
@@ -131,27 +118,39 @@ export default async function handler(
             return `${p.name}|${p.status}|${role}|${p.percentComplete}%`
         })
 
-        // 5. Call OpenAI
+        // 5. OpenAI
         const client = new OpenAIClient(process.env.OPENAI_API_KEY)
-
-        // Note: 'gpt-4o' has 128k context.
-        // Each line is approx 150 chars ~ 40 tokens.
-        // 3000 lines ~ 120k tokens. It MIGHT hit the limit if very large history.
-        // But for now, we try.
 
         const analysis = await client.generateAnalysis('deepAssessment', {
             member,
             stats,
-            recentWork, // Passed as a massive string block now
+            recentWork,
             projectHistory
         }, { model: 'gpt-4o' })
 
-        // 6. Write to file
-        fs.writeFileSync(filePath, analysis)
+        // 6. Save to DB Cache
+        // Expire in 30 days or similar (long term storage, but technically cache)
+        const expiresAt = new Date()
+        expiresAt.setDate(expiresAt.getDate() + 30)
+
+        await prisma.analysisCache.upsert({
+            where: { cacheKey },
+            create: {
+                cacheKey,
+                cacheType: 'ai_assessment',
+                data: { analysis, stats },
+                expiresAt
+            },
+            update: {
+                data: { analysis, stats },
+                expiresAt,
+                updatedAt: new Date()
+            }
+        })
 
         res.status(200).json({
             analysis,
-            stats: { ...stats, cached: false, lastUpdated: stats.analyzedAt }
+            stats: { ...stats, cached: false, lastUpdated: new Date().toISOString() }
         })
 
     } catch (error: any) {
