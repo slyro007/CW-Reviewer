@@ -6,6 +6,7 @@ import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
 import { useProjectsStore } from '@/stores/projectsStore'
 import { useTimePeriodStore } from '@/stores/timePeriodStore'
 import { useSelectedEngineerStore, TEAM_DEFINITIONS } from '@/stores/selectedEngineerStore'
+import { isStandardProject, isWorkstationProject } from '@/lib/projectUtils'
 
 export default function Dashboard() {
   const { members, isLoading: membersLoading, fetchMembers } = useMembersStore()
@@ -104,7 +105,17 @@ export default function Dashboard() {
   const filteredServiceTickets = useMemo(() => {
     if (!dateRange.start || !dateRange.end) return serviceTickets
 
-    return serviceTickets.filter(t => {
+    const workstationsProjectIds = new Set(projects.filter(isWorkstationProject).map(p => p.id))
+    const workstationTickets = projectTickets.filter(t => {
+      if (!workstationsProjectIds.has(t.projectId)) return false
+      if (t.closedFlag && t.closedDate) {
+        const closedAt = new Date(t.closedDate)
+        if (closedAt < dateRange.start! || closedAt > dateRange.end!) return false
+      }
+      return true
+    })
+
+    const baseServiceTickets = serviceTickets.filter(t => {
       // Team Filter
       if (selectedTeam !== 'All Company') {
         const teamMembers = TEAM_DEFINITIONS[selectedTeam] || []
@@ -139,13 +150,31 @@ export default function Dashboard() {
       }
       return true
     })
-  }, [serviceTickets, dateRange, selectedEngineerId, selectedTeam, members])
+
+    // Combine Service Tickets and Workstation Project Tickets (mapped to resemble tickets)
+    // We need to map ProjectTicket to Ticket structure loosely for display/stats
+    const mappedWorkstationTickets = workstationTickets.map(wt => ({
+      id: wt.id,
+      summary: wt.summary,
+      boardId: wt.boardId || 0,
+      status: wt.status,
+      closedDate: wt.closedDate,
+      closedFlag: wt.closedFlag,
+      dateEntered: wt.dateEntered,
+      type: 'Workstation',
+      owner: '', // Project tickets might not have single owner
+      resources: wt.resources,
+      company: wt.company // Assuming project tickets have company
+    })) as any[] // weak cast to mix types if needed, but filteredServiceTickets type is inferred from serviceTickets usually
+
+    return [...baseServiceTickets, ...mappedWorkstationTickets]
+  }, [serviceTickets, dateRange, selectedEngineerId, selectedTeam, members, projects, projectTickets])
 
   // Filter Projects
   const filteredProjects = useMemo(() => {
     if (!dateRange.start || !dateRange.end) return projects
 
-    return projects.filter(p => {
+    return projects.filter(isStandardProject).filter(p => {
       // Team Filter
       if (selectedTeam !== 'All Company') {
         const teamMembers = TEAM_DEFINITIONS[selectedTeam] || []

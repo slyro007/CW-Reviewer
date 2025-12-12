@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { Project, ProjectTicket } from '@/types'
 import { api } from '@/lib/api'
+import { isProjectActive, isProjectOnHold, isProjectClosed } from '@/lib/projectUtils'
 
 export interface ProjectStats {
   total: number
@@ -310,10 +311,10 @@ export const useProjectsStore = create<ProjectsState>((set, get) => ({
       totalPercentComplete += p.percentComplete || 0
     })
 
-    const open = projects.filter(p => p.status === 'Open').length
-    const inProgress = projects.filter(p => p.status === 'In Progress').length
-    const onHold = projects.filter(p => p.status === 'On-Hold').length
-    const closed = projects.filter(p => p.closedFlag || p.status === 'Closed' || p.status === 'Ready to Close').length
+    const open = projects.filter(isProjectActive).length
+    const inProgress = projects.filter(p => p.status === 'In Progress').length // Keep specific if needed, or use 'Active'
+    const onHold = projects.filter(isProjectOnHold).length
+    const closed = projects.filter(isProjectClosed).length
 
     return {
       total: projects.length,

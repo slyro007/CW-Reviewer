@@ -6,6 +6,7 @@ import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
 import { useTimePeriodStore } from '@/stores/timePeriodStore'
 import { format, differenceInDays } from 'date-fns'
 import { api } from '@/lib/api'
+import { isStandardProject } from '@/lib/projectUtils'
 import {
   BarChart,
   Bar,
@@ -22,6 +23,7 @@ import {
 const STATUS_COLORS: Record<string, string> = {
   'Open': '#3b82f6',
   'In Progress': '#f59e0b',
+  'Scoping': '#3b82f6',
   'On-Hold': '#ef4444',
   'Ready to Close': '#8b5cf6',
   'Closed': '#22c55e',
@@ -144,6 +146,9 @@ export default function Projects() {
         teamResourceProjectIds.has(p.id)
       )
     }
+
+    // Filter out Workstation Projects (they are treated as Service Desk)
+    result = result.filter(isStandardProject)
 
     if (statusFilter !== 'all') {
       result = result.filter(p => p.status === statusFilter)
@@ -573,8 +578,8 @@ Keep the tone professional and actionable.`
             <button
               onClick={() => setShowActiveOnly(!showActiveOnly)}
               className={`px-3 py-2 rounded text-sm font-medium transition-colors ${showActiveOnly
-                  ? 'bg-green-600 text-white'
-                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                ? 'bg-green-600 text-white'
+                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                 }`}
             >
               Active Projects (14d)

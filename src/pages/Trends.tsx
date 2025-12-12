@@ -8,9 +8,10 @@ import { useTimePeriodStore } from '@/stores/timePeriodStore'
 import DataSourceFilter, { useDataSources } from '@/components/DataSourceFilter'
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer, AreaChart, Area,
+  Tooltip, Legend, ResponsiveContainer, AreaChart, Area, Brush,
 } from 'recharts'
 import { format, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval } from 'date-fns'
+import { isStandardProject, isWorkstationProject } from '@/lib/projectUtils'
 
 type Granularity = 'day' | 'week' | 'month'
 
@@ -140,9 +141,9 @@ export default function Trends() {
         (p.managerIdentifier && teamIdentifiers.includes(p.managerIdentifier.toLowerCase())) ||
         timeEntryProjectIds.has(p.id) ||
         teamResourceProjectIds.has(p.id)
-      )
+      ).filter(p => isStandardProject(p))
     }
-    return projects
+    return projects.filter(p => isStandardProject(p))
   }, [projects, selectedEngineer, selectedTeam, includesProjects, filteredEntries])
 
   const filteredProjectTickets = useMemo(() => {
@@ -194,7 +195,24 @@ export default function Trends() {
       const serviceOpened = periodServiceTickets.length
       const serviceClosed = periodServiceTickets.filter(t => t.closedFlag).length
 
-      // Project tickets
+      // Add Workstation Project Tickets to Service Stats
+      // Workstation projects are NOT in filteredProjects, but we need their tickets
+      // We can find them from projectTickets + isWorkstationProject(project)
+      const workstationProjectIds = new Set(projects.filter(isWorkstationProject).map(p => p.id))
+      const periodWorkstationTickets = projectTickets.filter(t => {
+        if (!workstationProjectIds.has(t.projectId)) return false
+        if (!t.dateEntered) return false
+        const entered = new Date(t.dateEntered)
+        return entered >= period && entered <= periodEnd
+      })
+
+      const workstationOpened = periodWorkstationTickets.length
+      const workstationClosed = periodWorkstationTickets.filter(t => t.closedFlag).length
+
+      const totalServiceOpened = serviceOpened + workstationOpened
+      const totalServiceClosed = serviceClosed + workstationClosed
+
+      // Project tickets (standard only, since filteredProjects excludes workstations)
       const periodProjectTickets = filteredProjectTickets.filter(t => {
         if (!t.dateEntered) return false
         const entered = new Date(t.dateEntered)
@@ -210,10 +228,10 @@ export default function Trends() {
         nonBillableHours: Number((totalHours - billableHours).toFixed(1)),
         notesPercent: Number(notesPercent.toFixed(0)),
         billablePercent: totalHours > 0 ? Number(((billableHours / totalHours) * 100).toFixed(0)) : 0,
-        serviceOpened, serviceClosed,
+        serviceOpened: totalServiceOpened, serviceClosed: totalServiceClosed,
         projectOpened, projectClosed,
-        totalTickets: serviceOpened + projectOpened,
-        totalClosed: serviceClosed + projectClosed,
+        totalTickets: totalServiceOpened + projectOpened,
+        totalClosed: totalServiceClosed + projectClosed,
       }
     })
   }, [filteredEntries, filteredServiceTickets, filteredProjectTickets, dateRange, granularity])
@@ -316,14 +334,15 @@ export default function Trends() {
       {(includesServiceDesk || includesProjects) && (
         <div className="bg-gray-800 rounded-lg p-6 mb-6">
           <h3 className="text-lg font-semibold text-white mb-4">Ticket Volume Trends</h3>
-          <div className="h-64">
+          <div className="h-96">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                 <XAxis dataKey="date" stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 10 }} angle={-45} textAnchor="end" height={60} />
                 <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 12 }} />
                 <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#fff' }} />
-                <Legend />
+                <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
+                <Brush dataKey="date" height={30} stroke="#8884d8" fill="#1f2937" tickFormatter={() => ''} />
                 {includesServiceDesk && (
                   <>
                     <Bar dataKey="serviceOpened" name="Service Opened" fill="#06b6d4" radius={[4, 4, 0, 0]} />
