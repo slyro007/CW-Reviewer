@@ -11,7 +11,7 @@ import {
   Tooltip, Legend, ResponsiveContainer, AreaChart, Area, Brush,
 } from 'recharts'
 import { format, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval } from 'date-fns'
-import { isStandardProject, isWorkstationProject } from '@/lib/projectUtils'
+import { isStandardProject } from '@/lib/projectUtils'
 import ChartExplanation from '@/components/ChartExplanation'
 
 type Granularity = 'day' | 'week' | 'month'

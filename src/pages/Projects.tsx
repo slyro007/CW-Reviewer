@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSelectedEngineerStore, TEAM_DEFINITIONS } from '@/stores/selectedEngineerStore'
 import { useMembersStore } from '@/stores/membersStore'
 import { useProjectsStore } from '@/stores/projectsStore'
+import { useTicketsStore } from '@/stores/ticketsStore'
 import { useTimeEntriesStore } from '@/stores/timeEntriesStore'
 import { useTimePeriodStore } from '@/stores/timePeriodStore'
 import { format, differenceInDays } from 'date-fns'
@@ -173,7 +174,7 @@ export default function Projects() {
   // Filter project tickets based on engineer, date range, and filters
   const filteredTickets = useMemo(() => {
     // 1. Map Project Board tickets to ProjectTicket-like shape
-    const mappedBoardTickets = projectBoardTickets.map(t => ({
+    const mappedBoardTickets = projectBoardTickets.map((t: any) => ({
       ...t,
       projectId: 0, // No specific project entity
       projectName: 'Project Board Misc',

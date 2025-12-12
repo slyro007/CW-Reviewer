@@ -97,6 +97,7 @@ export default function Compare() {
 
       // If closed, check closed/resolved date
       if (t.closedFlag) {
+        // Ticket has resolvedDate.
         const closedAt = t.closedDate ? new Date(t.closedDate) : (t.resolvedDate ? new Date(t.resolvedDate) : null)
         if (closedAt) {
           // It was active if it closed AFTER start AND entered BEFORE end
@@ -111,9 +112,16 @@ export default function Compare() {
 
   const filteredProjectTickets = useMemo(() => {
     // Combine Project Tickets and Project Board Tickets
-    // Project Board Tickets need to be mapped or just treated as valid targets since logic checks 'projectId' or 'resources'
-    // If we map them, we should ensure projectId is handled (can be 0 or null)
-    const combined = [...projectTickets, ...projectBoardTickets]
+    // Map Project Board Tickets to match ProjectTicket shape
+    const mappedBoardTickets = projectBoardTickets.map(t => ({
+      ...t,
+      projectId: 0,
+      projectName: 'Project Board Misc',
+      phaseName: 'Project Board',
+      boardName: 'Project Board'
+    })) as any[]
+
+    const combined = [...projectTickets, ...mappedBoardTickets]
 
     return combined.filter(t => {
       // Logic: Active in period OR Closed in period
@@ -121,7 +129,11 @@ export default function Compare() {
       const entered = new Date(t.dateEntered)
 
       if (t.closedFlag) {
-        const closedAt = t.closedDate ? new Date(t.closedDate) : (t.resolvedDate ? new Date(t.resolvedDate) : null)
+        // ProjectTicket might not have resolvedDate. Ticket does.
+        // Use 'closedDate' as primary. Check 'resolvedDate' only if it exists in the type (via casting or 'in' check)
+        const closedDateVal = t.closedDate || (t as any).resolvedDate
+        const closedAt = closedDateVal ? new Date(closedDateVal) : null
+
         if (closedAt) {
           return closedAt >= dateRange.start && entered <= dateRange.end
         }
