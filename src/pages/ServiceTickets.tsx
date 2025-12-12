@@ -7,6 +7,8 @@ import { useTimePeriodStore } from '@/stores/timePeriodStore'
 import TimePeriodSelector from '@/components/TimePeriodSelector'
 import { differenceInHours } from 'date-fns'
 import { api } from '@/lib/api'
+import { prepareTicketData } from '@/lib/aiUtils'
+import ChartExplanation from '@/components/ChartExplanation'
 import {
   BarChart,
   Bar,
@@ -236,6 +238,8 @@ export default function ServiceTickets() {
         statusBreakdown: statusDistribution.map(s => `${s.name}: ${s.value}`).join(', '),
         boardBreakdown: boardDistribution.map(b => `${b.fullName}: ${b.value}`).join(', '),
         ageDistribution: `Under 24h: ${ageStats.under24h}, 24-48h: ${ageStats.under48h}, 2-7 days: ${ageStats.under7d}, Over 7 days: ${ageStats.over7d}`,
+        // New: Include actual ticket list
+        topTickets: prepareTicketData(filteredTickets, 50)
       }
 
       const prompt = `Analyze the following service desk ticket data for ${ticketData.engineer}:
@@ -248,12 +252,16 @@ Status Distribution: ${ticketData.statusBreakdown}
 Board Distribution: ${ticketData.boardBreakdown}
 Ticket Age (Open): ${ticketData.ageDistribution}
 
+Recent Tickets Context (Top 50):
+${JSON.stringify(ticketData.topTickets, null, 2)}
+
 Provide a comprehensive service desk analysis including:
 1. Overall assessment of ticket handling efficiency
 2. Observations about workload distribution across boards
 3. Ticket aging analysis and SLA concerns
 4. Recommendations for improving response times
 5. Priority areas for attention
+6. Specific notes on the types of issues being handled based on the ticket summaries.
 
 Keep the tone professional and actionable.`
 
@@ -329,12 +337,15 @@ Keep the tone professional and actionable.`
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        {/* Status Distribution */}
-        <div className="bg-gray-800 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Status Distribution</h3>
-          {statusDistribution.length > 0 ? (
-            <div className="h-64">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div className="bg-gray-800 p-6 rounded-lg shadow-lg">
+          <h3 className="text-xl font-semibold mb-4 text-white">Ticket Status Distribution</h3>
+          <ChartExplanation
+            title="Current Status"
+            description="Breakdown of tickets by their current workflow status. Helps identify bottlenecks (e.g., too many 'Waiting on Client')."
+          />
+          <div className="h-64 sm:h-80">
+            {statusDistribution.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -361,18 +372,22 @@ Keep the tone professional and actionable.`
                   />
                 </PieChart>
               </ResponsiveContainer>
-            </div>
-          ) : (
-            <div className="h-64 flex items-center justify-center text-gray-500">
-              No data available
-            </div>
-          )}
+            ) : (
+              <div className="h-64 flex items-center justify-center text-gray-500">
+                No data available
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Board Distribution */}
-        <div className="bg-gray-800 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Tickets by Board</h3>
-          <div className="h-64">
+        <div className="bg-gray-800 p-6 rounded-lg shadow-lg">
+          <h3 className="text-xl font-semibold mb-4 text-white">Board Distribution</h3>
+          <ChartExplanation
+            title="Workload by Board"
+            description="Shows which service boards are receiving the most tickets. useful for resource allocation."
+          />
+          <div className="h-64 sm:h-80">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={boardDistribution} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />

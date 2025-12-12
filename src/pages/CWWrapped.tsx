@@ -8,6 +8,7 @@ import { useTimePeriodStore } from '@/stores/timePeriodStore'
 import DataSourceFilter, { useDataSources } from '@/components/DataSourceFilter'
 import { api } from '@/lib/api'
 import { format, differenceInDays } from 'date-fns'
+import { prepareTicketData, prepareProjectData, prepareTimeEntryData } from '@/lib/aiUtils'
 
 export default function CWWrapped() {
   const { selectedEngineerId } = useSelectedEngineerStore()
@@ -16,7 +17,7 @@ export default function CWWrapped() {
   const { serviceTickets, fetchServiceBoardTickets } = useTicketsStore()
   const { projects, projectTickets, fetchProjects, fetchProjectTickets } = useProjectsStore()
   const { getDateRange, getPeriodLabel } = useTimePeriodStore()
-  
+
   const { dataSources, setDataSources, includesServiceDesk, includesProjects } = useDataSources()
   const [isGenerating, setIsGenerating] = useState(false)
   const [aiSummary, setAiSummary] = useState<string | null>(null)
@@ -79,7 +80,7 @@ export default function CWWrapped() {
           .filter(e => e.memberId === selectedEngineer.id && e.projectId !== null && e.projectId !== undefined)
           .map(e => e.projectId!)
       )
-      return projects.filter(p => 
+      return projects.filter(p =>
         p.managerIdentifier?.toLowerCase() === identifier ||
         timeEntryProjectIds.has(p.id)
       )
@@ -102,9 +103,9 @@ export default function CWWrapped() {
 
     // Service desk stats
     const serviceResolved = filteredServiceTickets.filter(t => t.closedFlag).length
-    const avgServiceTime = serviceResolved > 0 
+    const avgServiceTime = serviceResolved > 0
       ? filteredServiceTickets.filter(t => t.closedFlag && t.dateEntered && t.closedDate)
-          .reduce((sum, t) => sum + differenceInDays(new Date(t.closedDate!), new Date(t.dateEntered!)), 0) / serviceResolved 
+        .reduce((sum, t) => sum + differenceInDays(new Date(t.closedDate!), new Date(t.dateEntered!)), 0) / serviceResolved
       : 0
 
     // Project stats
@@ -271,6 +272,11 @@ export default function CWWrapped() {
         stats: wrappedStats,
         period: periodLabel,
         dataSources,
+        context: {
+          topTickets: prepareTicketData(filteredServiceTickets, 20),
+          topProjects: prepareProjectData(filteredProjects, 10),
+          topActivities: prepareTimeEntryData(filteredEntries, 20)
+        }
       })
       setAiSummary(response.analysis)
     } catch (err: any) {

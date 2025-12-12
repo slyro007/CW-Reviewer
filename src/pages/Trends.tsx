@@ -12,6 +12,8 @@ import {
 } from 'recharts'
 import { format, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval } from 'date-fns'
 import { isStandardProject, isWorkstationProject } from '@/lib/projectUtils'
+import ChartExplanation from '@/components/ChartExplanation'
+import { Info } from 'lucide-react'
 
 type Granularity = 'day' | 'week' | 'month'
 
@@ -280,10 +282,28 @@ export default function Trends() {
         avgResolution: Number(avgResolution.toFixed(1)),
         totalTickets: totalServiceOpened + projectOpened,
         totalClosed: totalServiceClosed + projectClosed,
+        avgResolution: Number(avgResolution.toFixed(1)),
+        totalTickets: totalServiceOpened + projectOpened,
+        totalClosed: totalServiceClosed + projectClosed,
         ...hoursByEngineer // Spread engineer hours for stacked chart
       }
     })
   }, [filteredEntries, filteredServiceTickets, filteredProjectTickets, projects, projectTickets, dateRange, granularity, members])
+
+  // Prepare Engineer Stack specific keys
+  const engineerKeys = useMemo(() => {
+    // Collect all unique engineer names from chartData
+    const keys = new Set<string>()
+    chartData.forEach(d => {
+      Object.keys(d).forEach(k => {
+        if (k !== 'totalHours' && typeof d[k] === 'number' && !['billableHours', 'nonBillableHours', 'notesPercent', 'billablePercent', 'serviceOpened', 'serviceClosed', 'projectOpened', 'projectClosed', 'projectsStarted', 'projectsCompleted', 'avgResolution', 'totalTickets', 'totalClosed'].includes(k)) {
+          keys.add(k)
+        }
+      })
+    })
+    return Array.from(keys)
+  }, [chartData])
+
 
   // Summary stats
   const summaryStats = useMemo(() => {
@@ -356,6 +376,14 @@ export default function Trends() {
       {/* Hours Over Time */}
       <div className="bg-gray-800 rounded-lg p-6 mb-6">
         <h3 className="text-lg font-semibold text-white mb-4">Hours Over Time</h3>
+        <ChartExplanation
+          title="Hours Trend"
+          description="Visualizes the total hours logged over time, split by Billable vs. Non-Billable. Helps track productivity and billing efficiency."
+          axisDetails={[
+            { label: "Y-Axis", description: "Total Hours" },
+            { label: "X-Axis", description: "Time Period (Day/Week/Month)" }
+          ]}
+        />
         <div className="h-80">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData}>
@@ -383,6 +411,14 @@ export default function Trends() {
       {(includesServiceDesk || includesProjects) && (
         <div className="bg-gray-800 rounded-lg p-6 mb-6">
           <h3 className="text-lg font-semibold text-white mb-4">Ticket Volume Trends</h3>
+          <ChartExplanation
+            title="Ticket Flow"
+            description="Tracks the volume of NEW vs CLOSED tickets. This includes both Service Desk tickets and individual Project Tasks/Tickets. Use this to spot accumulation (Opened > Closed)."
+            axisDetails={[
+              { label: "Y-Axis", description: "Number of Tickets" },
+              { label: "Bars", description: "Opened (Left) vs Closed (Right)" }
+            ]}
+          />
           <div className="h-96">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
@@ -410,8 +446,8 @@ export default function Trends() {
                 )}
                 {includesProjects && (
                   <>
-                    <Bar dataKey="projectOpened" name="Project Opened" fill="#a855f7" radius={[4, 4, 0, 0]} stackId="a" />
-                    <Bar dataKey="projectClosed" name="Project Closed" fill="#8b5cf6" radius={[4, 4, 0, 0]} stackId="b" />
+                    <Bar dataKey="projectOpened" name="Project Tickets Opened" fill="#a855f7" radius={[4, 4, 0, 0]} stackId="a" />
+                    <Bar dataKey="projectClosed" name="Project Tickets Closed" fill="#8b5cf6" radius={[4, 4, 0, 0]} stackId="b" />
                   </>
                 )}
               </BarChart>
@@ -424,6 +460,11 @@ export default function Trends() {
       {includesProjects && (
         <div className="bg-gray-800 rounded-lg p-6 mb-6">
           <h3 className="text-lg font-semibold text-white mb-4">Project Completions</h3>
+          <ChartExplanation
+            title="Project Throughput"
+            description="Tracks ACTUAL Project entities (not tickets). Shows how many full projects started vs finished."
+            axisDetails={[{ label: "Y-Axis", description: "Count of Projects" }]}
+          />
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
@@ -456,6 +497,11 @@ export default function Trends() {
         {/* Workload Distribution */}
         <div className="bg-gray-800 rounded-lg p-6">
           <h3 className="text-lg font-semibold text-white mb-4">Workload Distribution</h3>
+          <ChartExplanation
+            title="Team Workload"
+            description="Shows how total hours are distributed across the team. Each colored band represents an engineer's contribution."
+            axisDetails={[{ label: "Y-Axis", description: "Hours Logged" }]}
+          />
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData}>
@@ -463,16 +509,36 @@ export default function Trends() {
                 <XAxis dataKey="date" stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 10 }} />
                 <YAxis stroke="#9ca3af" tick={{ fill: '#9ca3af', fontSize: 12 }} />
                 <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px', color: '#fff' }} />
-                <Area type="monotone" dataKey="totalHours" name="Total Hours" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.3} />
+                {engineerKeys.length > 0 ? (
+                  engineerKeys.map((key, index) => (
+                    <Area
+                      key={key}
+                      type="monotone"
+                      dataKey={key}
+                      name={key}
+                      stroke={`hsl(${index * 40}, 70%, 60%)`}
+                      fill={`hsl(${index * 40}, 70%, 60%)`}
+                      fillOpacity={0.6}
+                      stackId="1"
+                    />
+                  ))
+                ) : (
+                  <Area type="monotone" dataKey="totalHours" name="Total Hours" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.3} />
+                )}
               </AreaChart>
             </ResponsiveContainer>
           </div>
-          <p className="text-xs text-gray-500 mt-2 text-center">Hours trend over time</p>
+          <p className="text-xs text-gray-500 mt-2 text-center">Cumulative hours per engineer</p>
         </div>
 
         {/* Resolution Time Trend */}
         <div className="bg-gray-800 rounded-lg p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Avg Resolution Time (Hours)</h3>
+          <h3 className="text-lg font-semibold text-white mb-4">Avg Resolution Time</h3>
+          <ChartExplanation
+            title="Resolution Speed"
+            description="Tracks how long (in hours) it takes to close tickets. High spikes usually indicate old tickets being finally closed ('cleanup')."
+            axisDetails={[{ label: "Y-Axis", description: "Avg. Hours to Close" }]}
+          />
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData}>
@@ -484,7 +550,7 @@ export default function Trends() {
               </LineChart>
             </ResponsiveContainer>
           </div>
-          <p className="text-xs text-gray-500 mt-2 text-center">Based on tickets closed in period</p>
+          <p className="text-xs text-gray-500 mt-2 text-center">Avg duration of tickets closed on that day</p>
         </div>
       </div>
 

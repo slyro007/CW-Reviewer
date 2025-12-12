@@ -8,6 +8,8 @@ import { useTimePeriodStore } from '@/stores/timePeriodStore'
 import DataSourceFilter, { useDataSources } from '@/components/DataSourceFilter'
 import { format } from 'date-fns'
 import { api } from '@/lib/api'
+import { prepareTimeEntryData } from '@/lib/aiUtils'
+import ChartExplanation from '@/components/ChartExplanation'
 
 interface EngineerAnalytics {
   memberId: number
@@ -168,8 +170,15 @@ export default function TimeTracking() {
     setAnalysisError(null)
     try {
       const response = await api.generateAnalysis('engineerAnalysis', {
-        prompt: `Analyze time tracking performance for ${selectedEngineer ? selectedEngineer.firstName : 'the team'} during ${periodLabel}.`,
-        data: { aggregateStats, engineerAnalytics, dataSources },
+        prompt: `Analyze time tracking performance for ${selectedEngineer ? selectedEngineer.firstName : 'the team'} during ${periodLabel}.
+        
+Include detailed observations on what specifically consumed the most time based on the "Top Activities" data.`,
+        data: {
+          aggregateStats,
+          engineerAnalytics,
+          dataSources,
+          topActivities: prepareTimeEntryData(filteredEntries, 50)
+        },
       })
       setAiAnalysis(response.analysis)
     } catch (error: any) {
@@ -236,6 +245,14 @@ export default function TimeTracking() {
             <h3 className="text-xl font-semibold text-white mb-4">
               {selectedEngineer ? 'Performance Summary' : 'Engineer Performance'}
             </h3>
+            <ChartExplanation
+              title="Hours & Billable %"
+              description="Compare total hours logged vs. billable efficiency per engineer. High total hours but low billable % might indicate internal work or non-billable support."
+              axisDetails={[
+                { label: "Bars", description: "Total Hours (Left Axis)" },
+                { label: "Line", description: "Billable % (Right Axis)" }
+              ]}
+            />
             {engineerAnalytics.length === 0 ? (
               <p className="text-gray-400">No data available</p>
             ) : (

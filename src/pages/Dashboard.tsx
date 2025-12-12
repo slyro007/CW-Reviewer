@@ -7,6 +7,7 @@ import { useProjectsStore } from '@/stores/projectsStore'
 import { useTimePeriodStore } from '@/stores/timePeriodStore'
 import { useSelectedEngineerStore, TEAM_DEFINITIONS } from '@/stores/selectedEngineerStore'
 import { isStandardProject, isWorkstationProject } from '@/lib/projectUtils'
+import ChartExplanation from '@/components/ChartExplanation'
 
 export default function Dashboard() {
   const { members, isLoading: membersLoading, fetchMembers } = useMembersStore()
@@ -306,6 +307,11 @@ export default function Dashboard() {
           <DataSourceFilter selected={dataSources} onChange={setDataSources} className="sm:self-end" />
         </div>
       </div>
+
+      <ChartExplanation
+        title="Dashboard Overview"
+        description="High-level metrics for the selected period. 'Total Hours' includes all time entries. 'Billable Hours' filters for entries marked as Billable."
+      />
 
       {/* Time Entry Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">

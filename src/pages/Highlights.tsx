@@ -8,6 +8,7 @@ import { useTimePeriodStore } from '@/stores/timePeriodStore'
 import DataSourceFilter, { useDataSources } from '@/components/DataSourceFilter'
 import { api } from '@/lib/api'
 import { format } from 'date-fns'
+import { prepareTicketData, prepareProjectData, prepareTimeEntryData } from '@/lib/aiUtils'
 
 interface Achievement {
   title: string
@@ -251,6 +252,11 @@ export default function Highlights() {
         member: selectedEngineer || { firstName: 'Team', lastName: '' },
         stats: { ...funStats, achievements: achievements.map(a => `${a.title}: ${a.value}`), dataSources },
         year: new Date().getFullYear(),
+        context: {
+          topTickets: prepareTicketData(filteredServiceTickets, 20),
+          topProjects: prepareProjectData(filteredProjects, 10),
+          topActivities: prepareTimeEntryData(filteredEntries, 20)
+        }
       }, { json: true, model: 'gpt-3.5-turbo-1106' })
 
       setAiHighlights(response.analysis)
