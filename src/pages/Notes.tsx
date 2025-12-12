@@ -317,8 +317,8 @@ export default function Notes() {
         </div>
 
         {/* Sidebar (Legend) */}
-        <div className="space-y-6">
-          <div className="bg-gray-800 rounded-lg p-6 sticky top-6">
+        <div className="space-y-6 sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto pr-2">
+          <div className="bg-gray-800 rounded-lg p-6">
             <h3 className="text-lg font-bold text-white mb-4">Quality Legend</h3>
 
             <div className="space-y-4 mb-6">
@@ -376,7 +376,7 @@ export default function Notes() {
           </div>
 
           {/* Employee History Legend */}
-          <div className="bg-gray-800 rounded-lg p-6 sticky top-[32rem]">
+          <div className="bg-gray-800 rounded-lg p-6">
             <h3 className="text-lg font-bold text-white mb-4">Employee History</h3>
 
             <div className="space-y-6">
