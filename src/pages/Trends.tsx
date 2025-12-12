@@ -281,9 +281,6 @@ export default function Trends() {
         avgResolution: Number(avgResolution.toFixed(1)),
         totalTickets: totalServiceOpened + projectOpened,
         totalClosed: totalServiceClosed + projectClosed,
-        avgResolution: Number(avgResolution.toFixed(1)),
-        totalTickets: totalServiceOpened + projectOpened,
-        totalClosed: totalServiceClosed + projectClosed,
         ...hoursByEngineer // Spread engineer hours for stacked chart
       }
     })
